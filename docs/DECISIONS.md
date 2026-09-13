@@ -111,3 +111,15 @@ Throwaway spike (`src/orchestrator/poc.py`, `src/tools/verifier.py`, `scripts/ru
 **Did verification catch the trap question?** **Not evaluated** — the trap never reached `ready_to_answer` / `verify()` because the LLM HTTP layer timed out. The verifier implementation (one differently phrased SELECT + consistency compare) is in place for Week 2, but this spike did not produce an empirical pass/fail on the trap.
 
 **Go / Redesign decision for Week 2 full build:** **Go, with hardening** — keep the custom plan/execute/ready loop and independent-SQL verify design (ADR-003 / ADR-005). Before relying on unattended multi-step runs: pin a known-good `NEBIUS_MODEL` from `/models`, raise `NEBIUS_TIMEOUT_SECONDS` for tool-calling turns, preload schema outside the LLM loop (already in the spike), and add retries/backoff on Nebius timeouts. Replace this throwaway POC in WBS-4.4; do not treat the failed live run as a redesign of the architecture.
+
+## ADR-009: Production loop follows LLD + POC hardening (not a redesign)
+
+**Status:** Accepted
+
+**Context:** The POC spike failed unattended runs due to Nebius model/timeout issues, but explicitly chose **Go, with hardening** rather than Redesign. Week-2 still needs BR-7 (ask when uncertain) as a first-class plan action.
+
+**Decision:** Implement `src/orchestrator/loop.py` per Document 3 pseudocode (`InvestigationState`, plan → execute → reflect, `MAX_ITERATIONS`), incorporating POC hardening: schema preload outside the LLM loop, retries/backoff on Nebius errors (`NEBIUS_MAX_RETRIES`), and a `needs_clarification` tool that stops the loop and returns a clarifying question instead of guessing. `ready_to_answer` maps to LLD `ANSWER_READY`; exhausting the cap yields an explicit `uncertain` status.
+
+**Alternatives considered:** Redesign around a framework agent (rejected per ADR-003 and POC Go); treat free-text LLM prose as answers without tools (rejected: harder to eval and easier to hallucinate); continue guessing when ambiguous (rejected: violates BR-7).
+
+**Consequences:** Clear terminal statuses for CLI/eval (`ok`, `uncertain`, `needs_clarification`, `verification_failed`). Callers must surface clarification to the user. Throwaway `poc.py` remains for historical spike runs but is not the production path.

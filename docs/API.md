@@ -28,3 +28,16 @@ Nebius AI Builder OpenAI-compatible chat completions wrapper.
 2. `NebiusClient.complete(...)` with schema + question and `RUN_SQL_TOOL_SCHEMA`
 3. If the model returns a `run_sql` tool call, execute it and print the raw JSON result (no loop / verify yet)
 
+## Orchestrator loop (`src/orchestrator/loop.py`)
+
+Production plan → execute → reflect loop (Phase 3 Document 3 LLD), with POC hardening.
+
+| Symbol | Interface | Notes |
+| --- | --- | --- |
+| `InvestigationState` | `question`, `schema`, `evidence`, `iterations` (+ draft / clarification fields) | Matches LLD state object |
+| `investigate(question, …) -> dict` | Bounded by `MAX_ITERATIONS` (default 8) | Preloads schema; retries Nebius via `NEBIUS_MAX_RETRIES` |
+| Plan tools | `run_sql`, `ready_to_answer` (ANSWER_READY), `needs_clarification` | Exactly one tool per plan turn |
+| Result `status` | `ok` \| `uncertain` \| `needs_clarification` \| `verification_failed` | Cap → `uncertain`; ambiguity → clarifying question (BR-7); verify after draft |
+
+`needs_clarification` arguments: `clarifying_question` (required), `reason` (optional).
+
