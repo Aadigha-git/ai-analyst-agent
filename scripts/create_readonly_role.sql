@@ -12,6 +12,8 @@ $$;
 -- Strip any privileges that may already exist, then grant SELECT only.
 REVOKE ALL ON SCHEMA public FROM analyst_readonly;
 GRANT USAGE ON SCHEMA public TO analyst_readonly;
+-- Prevent DDL via CREATE in public (defense in depth alongside no table ownership).
+REVOKE CREATE ON SCHEMA public FROM analyst_readonly;
 
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM analyst_readonly;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO analyst_readonly;

@@ -61,3 +61,15 @@ ADRs from Phase 3 Document 4 (unabridged).
 **Alternatives considered:** Pure textual self-critique with no new query (rejected: doesn't catch data-grounded errors); a second, larger LLM as an independent judge (rejected for v1: added cost/complexity beyond the timeline; noted as a future enhancement).
 
 **Consequences:** Meaningfully increases confidence in BR-4/BR-8 compliance at the cost of at least one extra tool call and LLM round-trip per question.
+
+## ADR-006: Separate env var for the read-only DB role credentials
+
+**Status:** Accepted
+
+**Context:** The agent must connect with a SELECT-only Postgres role (BR-6), while admin/setup tasks (seeding, creating the role) still need a privileged connection string. A single `DATABASE_URL` cannot safely serve both without risking the agent using write-capable credentials.
+
+**Decision:** Supply the agent's connection via a dedicated `READONLY_DATABASE_URL` in `.env` / `.env.example`, distinct from `DATABASE_URL`. Tests and runtime tool code that touch the target DB use the read-only URL. The `analyst_readonly` role itself is created by `scripts/create_readonly_role.sql` (also applied on demo DB init via docker-compose).
+
+**Alternatives considered:** Overloading `DATABASE_URL` to always be the read-only role (rejected: makes local seeding and role setup awkward); deriving the read-only URL by rewriting the privileged URL in code (rejected: couples password/username conventions and hides misconfiguration).
+
+**Consequences:** Clear separation of privileged vs agent credentials; misconfiguration fails loudly when `READONLY_DATABASE_URL` is missing. Callers must keep both variables in sync with the deployed roles.
