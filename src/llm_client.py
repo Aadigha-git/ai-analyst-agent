@@ -16,7 +16,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://api.studio.nebius.ai/v1"
-DEFAULT_MODEL = "meta-llama/Meta-Llama-3.1-70B-Instruct"
+DEFAULT_MODEL = "zai-org/GLM-5.2"
 
 
 @dataclass

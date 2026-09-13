@@ -97,3 +97,17 @@ ADRs from Phase 3 Document 4 (unabridged).
 **Alternatives considered:** Legacy `functions` / `function_call` fields (rejected: older OpenAI shape; tools is the current compatible path); adopt the `openai` Python SDK (deferred: thin `requests` wrapper keeps dependencies minimal and easy to mock in CI).
 
 **Consequences:** Tool schemas stay portable to any OpenAI-compatible endpoint; tests mock HTTP at the session layer. If Nebius drifts from the tools format, only `NebiusClient._parse_result` / payload construction need updates.
+
+## POC Spike Results
+
+Throwaway spike (`src/orchestrator/poc.py`, `src/tools/verifier.py`, `scripts/run_poc_spike.py`) run against the sample DB + Nebius chat completions. Ground truth from the seed: Q1 = **200** orders; Q2 MoM growth leader = **Central** (+6 in 2025-01); Q3 Apparel×store `SUM(line_total)` = **7719.44**.
+
+| ID | Question | Unattended success? | Notes |
+| --- | --- | --- | --- |
+| Q1 one-step | How many orders are in the database? | **No** | First attempt: model id `meta-llama/Meta-Llama-3.1-70B-Instruct` returned 404 “model does not exist”. After switching to a catalog model, Nebius calls timed out (`Read timed out` at 60s) before a draft answer / verify. |
+| Q2 multi-step | Which region had the largest month-over-month order growth? | **No** | Same Nebius timeout failure; loop + SQL path not completed unattended. |
+| Q3 trap | Apparel revenue via store channel (`line_total`) | **No** | Same timeout; no draft answer produced, so verification never ran. |
+
+**Did verification catch the trap question?** **Not evaluated** — the trap never reached `ready_to_answer` / `verify()` because the LLM HTTP layer timed out. The verifier implementation (one differently phrased SELECT + consistency compare) is in place for Week 2, but this spike did not produce an empirical pass/fail on the trap.
+
+**Go / Redesign decision for Week 2 full build:** **Go, with hardening** — keep the custom plan/execute/ready loop and independent-SQL verify design (ADR-003 / ADR-005). Before relying on unattended multi-step runs: pin a known-good `NEBIUS_MODEL` from `/models`, raise `NEBIUS_TIMEOUT_SECONDS` for tool-calling turns, preload schema outside the LLM loop (already in the spike), and add retries/backoff on Nebius timeouts. Replace this throwaway POC in WBS-4.4; do not treat the failed live run as a redesign of the architecture.
