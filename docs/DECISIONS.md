@@ -85,3 +85,15 @@ ADRs from Phase 3 Document 4 (unabridged).
 **Alternatives considered:** Depend on `sqlparse` / a full SQL parser (rejected for v1: extra dependency for a narrow allow-list); rely solely on the DB role (rejected: writes would fail only at execution and muddy eval/error handling); silently truncate without a flag (rejected: misleads downstream reasoning).
 
 **Consequences:** Clear pre-execution errors for DML/DDL; timeouts surface as `QueryCanceled`; callers must handle `truncated`. Exotic SQL edge cases may need validator tightening later.
+
+## ADR-008: OpenAI tools format for Nebius function calling
+
+**Status:** Accepted
+
+**Context:** Nebius AI Builder exposes an OpenAI-compatible `/chat/completions` API. The minimal agent must advertise `run_sql` (and later other tools) in a form the model understands, without pulling in a heavyweight agent framework (ADR-003).
+
+**Decision:** Use the OpenAI **tools** schema (`{"type":"function","function":{"name","description","parameters"}}`) and parse `message.tool_calls[0]` into a `ToolCall`. Implement the client with `requests` against `NEBIUS_BASE_URL`, not a Nebius-specific SDK. Log token usage from the response `usage` object on every call.
+
+**Alternatives considered:** Legacy `functions` / `function_call` fields (rejected: older OpenAI shape; tools is the current compatible path); adopt the `openai` Python SDK (deferred: thin `requests` wrapper keeps dependencies minimal and easy to mock in CI).
+
+**Consequences:** Tool schemas stay portable to any OpenAI-compatible endpoint; tests mock HTTP at the session layer. If Nebius drifts from the tools format, only `NebiusClient._parse_result` / payload construction need updates.
