@@ -1,0 +1,146 @@
+[
+  {
+    "id": "BQ-01",
+    "question": "How many orders are in the database?",
+    "expected_answer": "200",
+    "rubric": [
+      "States order count of 200",
+      "Uses orders table (COUNT), not order_items",
+      "Does not invent filters"
+    ],
+    "requires_multi_step": false,
+    "is_trap": false
+  },
+  {
+    "id": "BQ-02",
+    "question": "How many customers are there?",
+    "expected_answer": "80",
+    "rubric": [
+      "States customer count of 80",
+      "Counts customers rows, not distinct customers on orders"
+    ],
+    "requires_multi_step": false,
+    "is_trap": false
+  },
+  {
+    "id": "BQ-03",
+    "question": "How many products are in the catalog?",
+    "expected_answer": "40",
+    "rubric": [
+      "States product count of 40",
+      "Uses products table"
+    ],
+    "requires_multi_step": false,
+    "is_trap": false
+  },
+  {
+    "id": "BQ-04",
+    "question": "How many orders were placed through the web channel?",
+    "expected_answer": "74",
+    "rubric": [
+      "States 74 web orders",
+      "Filters orders.channel = 'web'",
+      "Does not confuse channel with customer region"
+    ],
+    "requires_multi_step": false,
+    "is_trap": false
+  },
+  {
+    "id": "BQ-05",
+    "question": "How many order line items are there?",
+    "expected_answer": "500",
+    "rubric": [
+      "States 500 order_items rows",
+      "Uses order_items, not orders"
+    ],
+    "requires_multi_step": false,
+    "is_trap": false
+  },
+  {
+    "id": "BQ-06",
+    "question": "What is the average line_total across all order items?",
+    "expected_answer": "627.18",
+    "rubric": [
+      "Reports ~627.18 (AVG of order_items.line_total)",
+      "Does not confuse this with average order value (AOV)"
+    ],
+    "requires_multi_step": false,
+    "is_trap": false
+  },
+  {
+    "id": "BQ-07",
+    "question": "Which region had the largest month-over-month order growth (by order count)?",
+    "expected_answer": "Central region, +6 orders from Dec 2024 to Jan 2025 (largest MoM growth)",
+    "rubric": [
+      "Identifies Central as the top region",
+      "Joins orders to customers for region",
+      "Computes month-over-month difference in order counts (not revenue)",
+      "Reports growth of +6 for the winning month"
+    ],
+    "requires_multi_step": true,
+    "is_trap": false
+  },
+  {
+    "id": "BQ-08",
+    "question": "What is the total revenue (sum of line_total) for Apparel products sold through the store channel?",
+    "expected_answer": "7719.44",
+    "rubric": [
+      "Reports 7719.44",
+      "Joins order_items → products (category) and order_items → orders (channel)",
+      "Filters Apparel and store",
+      "Sums line_total (not unit_price × quantity from products alone)"
+    ],
+    "requires_multi_step": true,
+    "is_trap": false
+  },
+  {
+    "id": "BQ-09",
+    "question": "How many orders did Consumer-segment customers place via the web channel?",
+    "expected_answer": "20",
+    "rubric": [
+      "Reports 20",
+      "Joins orders to customers",
+      "Applies both segment='Consumer' and channel='web'"
+    ],
+    "requires_multi_step": true,
+    "is_trap": false
+  },
+  {
+    "id": "BQ-10",
+    "question": "Which customer segment has the highest average order value (mean of per-order sum of line_total)?",
+    "expected_answer": "Consumer, with AOV 1736.36",
+    "rubric": [
+      "Identifies Consumer as highest",
+      "Computes per-order totals then averages by segment (not AVG(line_total))",
+      "Reports AOV approximately 1736.36",
+      "Ranks above Enterprise (~1484.56) and SMB (~1480.49)"
+    ],
+    "requires_multi_step": true,
+    "is_trap": false
+  },
+  {
+    "id": "BQ-11",
+    "question": "What is total Electronics revenue?",
+    "expected_answer": "Ambiguous without a time range; if all-time sum(line_total) for Electronics is intended, the value is 157640.18. Prefer asking whether to use a date window (e.g. 2024 alone is 63428.38).",
+    "rubric": [
+      "Recognizes missing time filter / asks for clarification (BR-7), OR explicitly states all-time assumption",
+      "If answering numerically without clarification, uses order_items.line_total joined to products.category='Electronics'",
+      "Does not sum products.unit_price alone",
+      "Does not silently pick an arbitrary year without saying so"
+    ],
+    "requires_multi_step": true,
+    "is_trap": true
+  },
+  {
+    "id": "BQ-12",
+    "question": "How are sales performing recently?",
+    "expected_answer": "Needs clarification: metric (order count vs revenue), definition of 'recently' (time window), and any segment/channel filter.",
+    "rubric": [
+      "Does not invent a metric or time window",
+      "Asks a clarifying question (needs_clarification) rather than guessing",
+      "Mentions at least one of: metric, time range, segment/channel"
+    ],
+    "requires_multi_step": false,
+    "is_trap": true
+  }
+]
