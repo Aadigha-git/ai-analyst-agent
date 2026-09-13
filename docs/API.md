@@ -6,7 +6,7 @@ Internal tool contracts the Agent Orchestrator calls (Phase 3 Document 5). The s
 | --- | --- | --- | --- |
 | `introspect_schema()` | none (reads full accessible schema once per session) | Table/column/type metadata, foreign-key hints where present | Read-only role; cached per session to limit repeated calls |
 | `run_sql(query: str)` | `query` — a single SELECT statement | `rows` (list of dicts, capped), `row_count`, `execution_time_seconds`, `truncated` (bool), `columns` | Rejects any non-SELECT **before** contacting Postgres (`SqlValidationError`); connection uses `SET TRANSACTION READ ONLY`; enforces `ROW_LIMIT` (default 500; injects `LIMIT` or truncates with `truncated=True`) and `QUERY_TIMEOUT_SECONDS` via `statement_timeout` (default 10s) |
-| `run_stats(operation: str, params: object, data_ref: str)` | `operation` — one of an allow-listed set (`aggregate`, `rolling_mean`, `outlier_zscore`, `correlation`, `segment`); `params` — operation-specific args; `data_ref` — reference to a prior query result | Computed result (table or summary statistic) | Operation must be in the allow-list; runs against already-fetched in-memory data only, never a new raw DB connection |
+| `run_stats(operation: str, params: object, data_ref: str)` | `operation` — one of `aggregate`, `rolling_mean`, `outlier_zscore`, `correlation`, `segment`; `params` — operation-specific args; `data_ref` — key/index into prior in-memory results (`data_store` or orchestrator `evidence`) | `{operation, params, data_ref, result}` where `result` is records or a summary object | Allow-list only via fixed `OPERATIONS` dict (ADR-004); `StatsOperationNotAllowed` for anything else; **never** `exec`/`eval`; no DB connection — optional kw-only `evidence` / `data_store` for resolution |
 | `verify(claim: str, evidence_ref: str)` | `claim` — the draft conclusion; `evidence_ref` — the supporting query result(s) | `consistent: bool`, `detail: str`, `new_query_used: str` | Always issues exactly one new, independently-phrased query; never re-runs the original query verbatim |
 | `format_output(answer: str, evidence: list)` | `answer` — verified conclusion; `evidence` — supporting data points | Narrative text + a simple chart/table payload | No DB or LLM access; pure presentation step |
 
@@ -40,4 +40,14 @@ Production plan → execute → reflect loop (Phase 3 Document 3 LLD), with POC 
 | Result `status` | `ok` \| `uncertain` \| `needs_clarification` \| `verification_failed` | Cap → `uncertain`; ambiguity → clarifying question (BR-7); verify after draft |
 
 `needs_clarification` arguments: `clarifying_question` (required), `reason` (optional).
+
+### `run_stats` params (allow-listed)
+
+| Operation | Required params | Result shape |
+| --- | --- | --- |
+| `aggregate` | `group_by` + (`agg` map **or** `column`/`func`) | list of group rows |
+| `rolling_mean` | `column`, `window` | rows with `{column}_rolling_mean_{window}` |
+| `outlier_zscore` | `column`; optional `threshold` (default 3) | `{threshold, mean, std, outlier_count, outliers, rows}` |
+| `correlation` | `col_a`, `col_b` | `{col_a, col_b, correlation}` |
+| `segment` | `group_col`, `metric_col`; optional `func` (default `mean`) | list of segment summary rows |
 
