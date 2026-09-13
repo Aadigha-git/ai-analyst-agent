@@ -5,3 +5,9 @@ __pycache__/
 logs/
 eval/results/
 .DS_Store
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/

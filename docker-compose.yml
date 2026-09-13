@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: analyst
+      POSTGRES_PASSWORD: analyst
+      POSTGRES_DB: analyst
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./sample_db/seed.sql:/docker-entrypoint-initdb.d/01_seed.sql:ro
+      - ./scripts/create_readonly_role.sql:/docker-entrypoint-initdb.d/02_readonly_role.sql:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U analyst -d analyst"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://analyst:analyst@db:5432/analyst
+    volumes:
+      - ./logs:/app/logs
+    stdin_open: true
+    tty: true
+
+volumes:
+  pgdata:
