@@ -8,7 +8,13 @@ Internal tool contracts the Agent Orchestrator calls (Phase 3 Document 5). The s
 | `run_sql(query: str)` | `query` — a single SELECT statement | `rows` (list of dicts, capped), `row_count`, `execution_time_seconds`, `truncated` (bool), `columns` | Rejects any non-SELECT **before** contacting Postgres (`SqlValidationError`); connection uses `SET TRANSACTION READ ONLY`; enforces `ROW_LIMIT` (default 500; injects `LIMIT` or truncates with `truncated=True`) and `QUERY_TIMEOUT_SECONDS` via `statement_timeout` (default 10s) |
 | `run_stats(operation: str, params: object, data_ref: str)` | `operation` — one of `aggregate`, `rolling_mean`, `outlier_zscore`, `correlation`, `segment`; `params` — operation-specific args; `data_ref` — key/index into prior in-memory results (`data_store` or orchestrator `evidence`) | `{operation, params, data_ref, result}` where `result` is records or a summary object | Allow-list only via fixed `OPERATIONS` dict (ADR-004); `StatsOperationNotAllowed` for anything else; **never** `exec`/`eval`; no DB connection — optional kw-only `evidence` / `data_store` for resolution |
 | `verify(claim: str, evidence_ref: str)` | `claim` — draft conclusion; `evidence_ref` — supporting evidence (JSON/text; used to recover original SQL) | `{consistent: bool, detail: str, new_query_used: str}` | Exactly one new query; **raises** `DuplicateVerificationQuery` if proposed SQL normalizes equal to an original; optional kw-only `prior_queries`, `client`, `sql_runner` for orchestrator/tests |
-| `format_output(answer: str, evidence: list)` | `answer` — verified conclusion; `evidence` — supporting data points | Narrative text + a simple chart/table payload | No DB or LLM access; pure presentation step |
+| `format_output(answer: str, evidence: list)` | `answer` — verified conclusion; `evidence` — supporting data points / tool results | `{narrative, table}` ; with `verbose=True` also `{sql_queries, trace}` | LLM phrases a short plain-language narrative (no SQL); compact supporting table for Rich CLI rendering; default omits raw SQL/tool trace; `--verbose` / `verbose=True` includes them |
+
+## CLI (`python -m src.cli ask`)
+
+| Flag | Default | Behavior |
+| --- | --- | --- |
+| `--verbose` / `-v` | off | Show underlying SQL and tool trace after the narrative + table |
 
 ## LLM client (`src/llm_client.py`)
 
@@ -22,11 +28,9 @@ Nebius AI Builder OpenAI-compatible chat completions wrapper.
 | `LlmResult` | `kind`, `text?`, `tool_call?`, `usage`, `raw` | `ToolCall` has `id`, `name`, `arguments` (parsed JSON object) |
 | `RUN_SQL_TOOL_SCHEMA` | OpenAI tools item: `{"type":"function","function":{name,description,parameters}}` | Shared with the minimal CLI single-step path |
 
-### Minimal CLI single-step (`python -m src.cli ask "<question>"`)
+### Minimal CLI single-step (`run_single_step`)
 
-1. `introspect_schema()` once (cached)
-2. `NebiusClient.complete(...)` with schema + question and `RUN_SQL_TOOL_SCHEMA`
-3. If the model returns a `run_sql` tool call, execute it and print the raw JSON result (no loop / verify yet)
+Still available for POC-style wiring tests. The default `ask` command runs `investigate()` then `format_output()` / Rich rendering.
 
 ## Orchestrator loop (`src/orchestrator/loop.py`)
 

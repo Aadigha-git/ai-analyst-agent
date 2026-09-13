@@ -18,6 +18,8 @@ if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
 from llm_client import RUN_SQL_TOOL_SCHEMA, LlmResult, NebiusClient  # noqa: E402
+from orchestrator.loop import investigate  # noqa: E402
+from output_formatter import format_output, render_formatted  # noqa: E402
 from tools.schema_introspector import introspect_schema  # noqa: E402
 from tools.sql_executor import run_sql  # noqa: E402
 
@@ -29,7 +31,7 @@ logging.basicConfig(
 )
 
 app = typer.Typer(help="Agentic data-analyst agent for PostgreSQL.")
-console = Console()
+console = Console(record=True)
 
 SYSTEM_PROMPT = (
     "You are a data analyst agent with read-only access to a PostgreSQL database. "
@@ -89,13 +91,72 @@ def run_single_step(
     }
 
 
+def present_investigation(
+    result: dict[str, Any],
+    *,
+    verbose: bool = False,
+    client: NebiusClient | None = None,
+    console_: Console | None = None,
+) -> str:
+    """Format and print an investigate() result; return captured display text."""
+    out = console_ or Console(record=True)
+    status = result.get("status")
+
+    if status == "needs_clarification":
+        out.print(
+            result.get("clarifying_question") or "Could you clarify your question?"
+        )
+        if verbose and result.get("reason"):
+            out.print(f"[dim]Reason: {result['reason']}[/dim]")
+        return out.export_text() if hasattr(out, "export_text") else ""
+
+    if status == "uncertain":
+        out.print(
+            result.get("message")
+            or "Could not reach a confident answer within the iteration cap."
+        )
+        if verbose:
+            out.print_json(data=result.get("trace") or [])
+        return out.export_text() if hasattr(out, "export_text") else ""
+
+    if status not in {"ok", "verification_failed"}:
+        out.print_json(data=result)
+        return out.export_text() if hasattr(out, "export_text") else ""
+
+    state = result.get("state")
+    evidence = list(getattr(state, "evidence", None) or [])
+    answer = result.get("answer") or ""
+    formatted = format_output(
+        answer,
+        evidence,
+        client=client,
+        verbose=verbose,
+        trace=result.get("trace"),
+    )
+    if status == "verification_failed":
+        out.print(
+            "[yellow]Verification flagged inconsistency; showing draft carefully.[/yellow]"
+        )
+        detail = (result.get("verification") or {}).get("detail")
+        if detail:
+            out.print(f"[dim]{detail}[/dim]")
+
+    return render_formatted(formatted, console=out, verbose=verbose)
+
+
 @app.command("ask")
 def ask(
-    question: str = typer.Argument(..., help="Natural-language analytics question.")
+    question: str = typer.Argument(..., help="Natural-language analytics question."),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Also show underlying SQL and tool trace (off by default).",
+    ),
 ) -> None:
-    """Run a single-step ask (schema + one LLM tool call); print the raw result."""
-    payload = run_single_step(question)
-    console.print_json(data=payload)
+    """Investigate a question and print a narrative answer with a supporting table."""
+    result = investigate(question)
+    present_investigation(result, verbose=verbose)
 
 
 @app.callback()

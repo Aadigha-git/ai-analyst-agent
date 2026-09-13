@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from pathlib import Path
@@ -64,20 +63,36 @@ def test_run_single_step_executes_mocked_run_sql_tool_call(
     assert "orders" in user_msg.lower()
 
 
-def test_cli_ask_command_prints_tool_result(
-    readonly_configured: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fake = {
-        "type": "tool_result",
-        "tool": "run_sql",
-        "query": "SELECT 1",
-        "result": {"rows": [{"n": 1}], "row_count": 1, "truncated": False},
-        "llm": {"usage": {"total_tokens": 2}},
+def test_cli_ask_command_prints_narrative(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_result = {
+        "status": "ok",
+        "answer": "There are 200 orders.",
+        "trace": [],
+        "state": MagicMock(
+            evidence=[
+                {
+                    "action": "run_sql",
+                    "result": {
+                        "query": "SELECT COUNT(*) AS n FROM orders",
+                        "columns": ["n"],
+                        "rows": [{"n": 200}],
+                    },
+                }
+            ]
+        ),
+        "verification": {"consistent": True},
     }
-    monkeypatch.setattr("cli.run_single_step", lambda question, client=None: fake)
+    monkeypatch.setattr("cli.investigate", lambda question: fake_result)
+    client = MagicMock()
+    client.complete.return_value = LlmResult(
+        kind="text",
+        text="There are 200 orders in the database.",
+        usage={"total_tokens": 2},
+    )
+    monkeypatch.setattr("output_formatter.NebiusClient", lambda: client)
+
     runner = CliRunner()
     result = runner.invoke(app, ["ask", "ping"])
     assert result.exit_code == 0, result.output
-    parsed = json.loads(result.stdout)
-    assert parsed["type"] == "tool_result"
-    assert parsed["result"]["rows"][0]["n"] == 1
+    assert "200" in result.output
+    assert "SELECT" not in result.output.upper()

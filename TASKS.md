@@ -9,3 +9,4 @@
 | WBS-4.4 | Production plan/execute/reflect loop (`InvestigationState`, MAX_ITERATIONS, NEEDS_CLARIFICATION) | BR-3, BR-7 | — | M | Done |
 | WBS-4.3 | Sandboxed stats engine (`run_stats` allow-list; no exec/eval) | BR-3, BR-5 | — | M | Done |
 | WBS-4.5 | Production self-verification (`verify`; reject identical SQL in code) | BR-4 | — | M | Done |
+| WBS-4.6 | Narrative output formatter + CLI `--verbose` SQL/trace | BR-5 | — | M | Done |
