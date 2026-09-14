@@ -1,0 +1,8 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+# Align local `ruff check .` with the pre-commit hook's classic defaults so
+# path-bootstrap `# noqa: E402` directives remain valid (E402 is in E4xx).
+select = ["E4", "E7", "E9", "F"]

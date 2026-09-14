@@ -1,0 +1,9 @@
+psycopg[binary]
+pandas
+python-dotenv
+typer
+requests
+rich
+openai
+anthropic
+google-genai
