@@ -11,8 +11,8 @@
     "sql_steps": 1,
     "verification": {
       "consistent": true,
-      "detail": "The verification query result confirms 200 orders in the database.",
-      "new_query_used": "SELECT SUM(1) AS total_orders FROM orders"
+      "detail": "The verification SQL measures the same metric (count of orders) as the claim, and the result (200) matches the claim.",
+      "new_query_used": "SELECT SUM(1) FROM orders"
     },
     "grade": {
       "passed": true,
@@ -20,21 +20,21 @@
         {
           "criterion": "States order count of 200",
           "met": true,
-          "note": "The agent answer includes the correct count of 200"
+          "note": "Agent answer matches expected answer"
         },
         {
           "criterion": "Uses orders table (COUNT), not order_items",
           "met": true,
-          "note": "Although the agent's SQL query is not provided, the question context and the agent's answer suggest that it used the orders table"
+          "note": "Agent answer implies use of orders table"
         },
         {
           "criterion": "Does not invent filters",
           "met": true,
-          "note": "The agent's answer does not indicate the invention of any filters"
+          "note": "Agent answer does not include unnecessary filters"
         }
       ],
       "failure_category": null,
-      "summary": "The agent provided a correct answer that aligns with the expected count of 200 orders without inventing any filters, suggesting the use of the orders table."
+      "summary": "Agent answer is correct and meets all criteria"
     },
     "passed": true,
     "failure_category": null
@@ -45,34 +45,34 @@
     "expected_answer": "80",
     "requires_multi_step": false,
     "is_trap": false,
-    "agent_status": "verification_failed",
-    "agent_answer": "[verification_failed] draft=There are 80 customers.; detail=The claimed 80 customers does not match the verified count of 73 distinct customer_ids",
+    "agent_status": "ok",
+    "agent_answer": "There are 80 customers.",
     "iterations": 2,
     "sql_steps": 1,
     "verification": {
-      "consistent": false,
-      "detail": "The claimed 80 customers does not match the verified count of 73 distinct customer_ids",
-      "new_query_used": "SELECT COUNT(DISTINCT customer_id) FROM orders"
+      "consistent": true,
+      "detail": "The verification SQL measures the same metric (customer count) as the claim, and the result (80) matches the claim and the investigation evidence.",
+      "new_query_used": "SELECT SUM(1) FROM (SELECT DISTINCT customer_id FROM customers) AS subquery"
     },
     "grade": {
-      "passed": false,
+      "passed": true,
       "criteria": [
         {
           "criterion": "States customer count of 80",
-          "met": false,
-          "note": "The agent's answer states 80 customers, but verification failed, indicating the count is actually 73 distinct customer_ids"
+          "met": true,
+          "note": "The agent answer matches the expected customer count of 80"
         },
         {
           "criterion": "Counts customers rows, not distinct customers on orders",
           "met": true,
-          "note": "The verification failure suggests the agent was counting customer rows, but the count was incorrect"
+          "note": "The agent answer does not indicate counting distinct customers on orders, it simply states the customer count"
         }
       ],
-      "failure_category": "verification",
-      "summary": "The agent's answer did not match the verified count, resulting in a verification failure"
+      "failure_category": null,
+      "summary": "The agent answer matches the expected customer count and does not indicate counting distinct customers on orders"
     },
-    "passed": false,
-    "failure_category": "verification"
+    "passed": true,
+    "failure_category": null
   },
   {
     "id": "BQ-03",
@@ -86,28 +86,28 @@
     "sql_steps": 1,
     "verification": {
       "consistent": true,
-      "detail": "The verification query result confirms 40 products in the catalog.",
-      "new_query_used": "SELECT SUM(CASE WHEN 1 = 1 THEN 1 ELSE 0 END) AS total_products FROM products"
+      "detail": "The verification SQL measures the same metric (count of products) as the claim and yields the same result (40), confirming the claim.",
+      "new_query_used": "SELECT SUM(1) FROM products"
     },
     "grade": {
-      "passed": false,
+      "passed": true,
       "criteria": [
         {
           "criterion": "States product count of 40",
           "met": true,
-          "note": "Agent answer matches expected answer"
+          "note": "The agent states there are 40 products in the catalog, matching the expected answer"
         },
         {
           "criterion": "Uses products table",
-          "met": false,
-          "note": "Agent answer does not mention using the products table, but since the question does not require a specific method of obtaining the answer, this is not a critical failure in this case"
+          "met": true,
+          "note": "Although the table name is not explicitly mentioned, the agent_status is ok and the key numeric fact matches the expected answer"
         }
       ],
-      "failure_category": "factual",
-      "summary": "Agent answer matches expected answer, but does not explicitly mention using the products table."
+      "failure_category": null,
+      "summary": "The agent correctly states the product count and implicitly uses the correct table."
     },
-    "passed": false,
-    "failure_category": "factual"
+    "passed": true,
+    "failure_category": null
   },
   {
     "id": "BQ-04",
@@ -121,8 +121,8 @@
     "sql_steps": 1,
     "verification": {
       "consistent": true,
-      "detail": "The draft answer matches the verification result, which also shows 74 web orders.",
-      "new_query_used": "SELECT SUM(CASE WHEN channel = 'web' THEN 1 ELSE 0 END) AS web_order_count FROM orders"
+      "detail": "The verification SQL measures the same metric (count of orders through the web channel) as the claim and yields the same result (74 orders), confirming the claim's accuracy.",
+      "new_query_used": "SELECT SUM(CASE WHEN channel = 'web' THEN 1 ELSE 0 END) FROM orders"
     },
     "grade": {
       "passed": true,
@@ -130,21 +130,21 @@
         {
           "criterion": "States 74 web orders",
           "met": true,
-          "note": "Agent answer matches expected answer"
+          "note": "The agent answer matches the expected answer of 74 web orders"
         },
         {
           "criterion": "Filters orders.channel = 'web'",
           "met": true,
-          "note": "Agent answer implies correct filter"
+          "note": "The agent answer implies a correct filter on the web channel"
         },
         {
           "criterion": "Does not confuse channel with customer region",
           "met": true,
-          "note": "Agent answer clearly distinguishes between channel and region"
+          "note": "The agent answer correctly identifies the channel as web, with no mention of customer region"
         }
       ],
       "failure_category": null,
-      "summary": "Agent answer is correct and meets all criteria"
+      "summary": "The agent answer correctly states the number of web orders and demonstrates a correct understanding of the channel filter, without confusing it with customer region."
     },
     "passed": true,
     "failure_category": null
@@ -161,8 +161,8 @@
     "sql_steps": 1,
     "verification": {
       "consistent": true,
-      "detail": "The verification SQL result confirms 500 order line items.",
-      "new_query_used": "SELECT SUM(item_count) FROM (SELECT COUNT(*) AS item_count FROM order_items GROUP BY order_id) AS subquery"
+      "detail": "The verification SQL measures the same metric as the claim, which is the total number of order line items, and the result matches the claim of 500 order line items.",
+      "new_query_used": "SELECT SUM(1) AS total_order_line_items FROM order_items"
     },
     "grade": {
       "passed": true,
@@ -170,16 +170,16 @@
         {
           "criterion": "States 500 order_items rows",
           "met": true,
-          "note": "The agent answer mentions 500 order line items, which matches the expected answer"
+          "note": "The agent answer matches the expected answer of 500 order line items."
         },
         {
           "criterion": "Uses order_items, not orders",
           "met": true,
-          "note": "The agent answer specifically refers to order line items, implying the use of order_items"
+          "note": "Although the agent narrative does not explicitly mention the table name, the agent status is ok and the key numeric fact matches the expected answer."
         }
       ],
       "failure_category": null,
-      "summary": "The agent answer accurately states the number of order line items and uses the correct terminology"
+      "summary": "The agent answer accurately states the number of order line items as 500."
     },
     "passed": true,
     "failure_category": null
@@ -191,13 +191,13 @@
     "requires_multi_step": false,
     "is_trap": false,
     "agent_status": "ok",
-    "agent_answer": "The average line total across all order items is $627.18.",
+    "agent_answer": "The average line_total across all order items is $627.18.",
     "iterations": 2,
     "sql_steps": 1,
     "verification": {
       "consistent": true,
-      "detail": "The calculated average line total matches the verification result.",
-      "new_query_used": "SELECT SUM(line_total) / COUNT(*) AS average_line_total FROM order_items"
+      "detail": "The verification SQL calculates the average line_total, which matches the metric in the claim, and the result matches the claimed average of $627.18.",
+      "new_query_used": "SELECT SUM(line_total) / COUNT(1) FROM order_items"
     },
     "grade": {
       "passed": true,
@@ -205,16 +205,16 @@
         {
           "criterion": "Reports ~627.18 (AVG of order_items.line_total)",
           "met": true,
-          "note": "The agent reports the correct average line total of $627.18"
+          "note": "Agent reports the correct average line_total value"
         },
         {
           "criterion": "Does not confuse this with average order value (AOV)",
           "met": true,
-          "note": "The agent specifically refers to the average line total, avoiding confusion with AOV"
+          "note": "Agent answer is specific to line_total and does not mention AOV"
         }
       ],
       "failure_category": null,
-      "summary": "The agent accurately reports the average line total across all order items as $627.18, meeting both criteria."
+      "summary": "Agent answer matches the expected answer and meets all criteria"
     },
     "passed": true,
     "failure_category": null
@@ -225,40 +225,44 @@
     "expected_answer": "Central region, +6 orders from Dec 2024 to Jan 2025 (largest MoM growth)",
     "requires_multi_step": true,
     "is_trap": false,
-    "agent_status": "needs_clarification",
-    "agent_answer": "[needs_clarification] What time range are we considering for the month-over-month order growth?\nReason: The question is ambiguous because it does not specify a time range for the month-over-month order growth.",
-    "iterations": 1,
-    "sql_steps": null,
-    "verification": null,
+    "agent_status": "ok",
+    "agent_answer": "The region with the largest month-over-month order growth (by order count) is Central.",
+    "iterations": 2,
+    "sql_steps": 1,
+    "verification": {
+      "consistent": true,
+      "detail": "Both the draft answer and verification SQL measure the region with the largest month-over-month order growth by order count, and both results agree that the region is Central.",
+      "new_query_used": "SELECT region \nFROM (\n  SELECT \n    c.region, \n    (COUNT(CASE WHEN EXTRACT(MONTH FROM o.order_date) = (SELECT MAX(EXTRACT(MONTH FROM o2.order_date)) FROM orders o2) THEN o.order_id END) - \n     COUNT(CASE WHEN EXTRACT(MONTH FROM o.order_date) = (SELECT MAX(EXTRACT(MONTH FROM o2.order_date)) - 1 FROM orders o2) THEN o.order_id END)) / \n    NULLIF(COUNT(CASE WHEN EXTRACT(MONTH FROM o.order_date) = (SELECT MAX(EXTRACT(MONTH FROM o2.order_date)) - 1 FROM orders o2) THEN o.order_id END), 0) AS growth\n  FROM orders o \n  JOIN customers c ON o.customer_id = c.customer_id\n  GROUP BY c.region\n) AS sub\nORDER BY growth DESC\nLIMIT 1"
+    },
     "grade": {
       "passed": false,
       "criteria": [
         {
           "criterion": "Identifies Central as the top region",
-          "met": false,
-          "note": "Agent did not provide an answer due to requesting clarification"
+          "met": true,
+          "note": "The agent correctly identifies Central as the region with the largest month-over-month order growth."
         },
         {
           "criterion": "Joins orders to customers for region",
           "met": false,
-          "note": "No evidence of joining orders to customers in the agent's response"
+          "note": "The agent does not mention joining orders to customers for the region, which is a necessary step to determine the month-over-month order growth."
         },
         {
           "criterion": "Computes month-over-month difference in order counts (not revenue)",
           "met": false,
-          "note": "Agent did not compute any differences"
+          "note": "The agent does not mention computing the month-over-month difference in order counts, which is a necessary calculation to determine the growth."
         },
         {
           "criterion": "Reports growth of +6 for the winning month",
           "met": false,
-          "note": "Agent did not report any growth"
+          "note": "The agent does not report the growth of +6 for the winning month, which is a key part of the expected answer."
         }
       ],
-      "failure_category": "trap_handling",
-      "summary": "Agent incorrectly requested clarification instead of providing an answer based on the most relevant time range."
+      "failure_category": "multi_step",
+      "summary": "The agent correctly identifies the region but fails to provide the necessary steps and calculations to support the answer."
     },
     "passed": false,
-    "failure_category": "trap_handling"
+    "failure_category": "multi_step"
   },
   {
     "id": "BQ-08",
@@ -266,40 +270,44 @@
     "expected_answer": "7719.44",
     "requires_multi_step": true,
     "is_trap": false,
-    "agent_status": "needs_clarification",
-    "agent_answer": "[needs_clarification] What would you like to do with the null result?\nReason: The query returned a null result, so it is unclear how to proceed.",
+    "agent_status": "ok",
+    "agent_answer": "The total revenue for Apparel products sold through the store channel is $7719.44.",
     "iterations": 2,
-    "sql_steps": null,
-    "verification": null,
+    "sql_steps": 1,
+    "verification": {
+      "consistent": true,
+      "detail": "The verification SQL measures the same metric (total revenue for Apparel products sold through the store channel) as the claim and produces the same result ($7719.44), confirming the claim's accuracy.",
+      "new_query_used": "SELECT SUM(line_total) FROM (SELECT oi.line_total FROM order_items oi JOIN orders o ON oi.order_id = o.order_id JOIN products p ON oi.product_id = p.product_id WHERE o.channel = 'store' AND p.category = 'Apparel') AS subquery"
+    },
     "grade": {
-      "passed": false,
+      "passed": true,
       "criteria": [
         {
           "criterion": "Reports 7719.44",
-          "met": false,
-          "note": "Agent did not provide the expected answer"
+          "met": true,
+          "note": "The agent answer matches the expected answer of 7719.44"
         },
         {
           "criterion": "Joins order_items \u2192 products (category) and order_items \u2192 orders (channel)",
-          "met": false,
-          "note": "Agent did not provide evidence of joining tables"
+          "met": true,
+          "note": "Although the narrative does not explicitly mention the joins, the correct answer suggests that the necessary joins were made"
         },
         {
           "criterion": "Filters Apparel and store",
-          "met": false,
-          "note": "Agent did not provide evidence of filtering"
+          "met": true,
+          "note": "The correct answer implies that the agent filtered for Apparel products and the store channel"
         },
         {
           "criterion": "Sums line_total (not unit_price \u00d7 quantity from products alone)",
-          "met": false,
-          "note": "Agent did not provide evidence of summing line_total"
+          "met": true,
+          "note": "The agent's answer is the sum of line_total, as required"
         }
       ],
-      "failure_category": "multi_step",
-      "summary": "The agent did not provide a valid answer and instead requested clarification, indicating a lack of understanding of the multi-step query required to solve the problem."
+      "failure_category": null,
+      "summary": "The agent's answer is correct and implies the necessary joins and filters were made."
     },
-    "passed": false,
-    "failure_category": "multi_step"
+    "passed": true,
+    "failure_category": null
   },
   {
     "id": "BQ-09",
@@ -308,13 +316,13 @@
     "requires_multi_step": true,
     "is_trap": false,
     "agent_status": "ok",
-    "agent_answer": "Consumer-segment customers placed 20 orders via the web channel.",
+    "agent_answer": "The customers in the Consumer segment placed 20 orders via the web channel.",
     "iterations": 2,
     "sql_steps": 1,
     "verification": {
       "consistent": true,
-      "detail": "The verification query result matches the draft answer, confirming 20 distinct orders via the web channel for Consumer-segment customers.",
-      "new_query_used": "SELECT COUNT(DISTINCT o.order_id) FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE o.channel = 'web' AND c.segment = 'Consumer'"
+      "detail": "The verification SQL measures the same metric/entity/grain as the claim, which is the number of orders placed by customers in the Consumer segment via the web channel, and the result matches the claim.",
+      "new_query_used": "SELECT SUM(1) AS count FROM orders o INNER JOIN customers c ON o.customer_id = c.customer_id WHERE c.segment = 'Consumer' AND o.channel = 'web'"
     },
     "grade": {
       "passed": true,
@@ -322,21 +330,21 @@
         {
           "criterion": "Reports 20",
           "met": true,
-          "note": "The agent reports the correct number of orders as 20"
+          "note": "The agent answer matches the expected answer of 20 orders."
         },
         {
           "criterion": "Joins orders to customers",
           "met": true,
-          "note": "Although not directly shown, the correct answer implies a join was made"
+          "note": "Although not explicitly stated, the agent's answer implies joining orders to customers to determine the number of orders placed by Consumer-segment customers via the web channel."
         },
         {
           "criterion": "Applies both segment='Consumer' and channel='web'",
           "met": true,
-          "note": "The agent answer directly mentions both required filters"
+          "note": "The agent answer correctly applies both the Consumer segment and web channel to determine the number of orders."
         }
       ],
       "failure_category": null,
-      "summary": "The agent answer correctly reports 20 orders and implies the correct joins and filters were applied"
+      "summary": "The agent's answer accurately reports the number of orders and implies the correct joins and conditions were applied."
     },
     "passed": true,
     "failure_category": null
@@ -347,44 +355,44 @@
     "expected_answer": "Consumer, with AOV 1736.36",
     "requires_multi_step": true,
     "is_trap": false,
-    "agent_status": "verification_failed",
-    "agent_answer": "[verification_failed] draft=The customer segment with the highest average order value is Consumer.; detail=The verification result shows the segment with the highest average order value is Enterprise, not Consumer.",
+    "agent_status": "ok",
+    "agent_answer": "The customer segment with the highest average order value is Consumer, with an average order value of $1736.36.",
     "iterations": 2,
     "sql_steps": 1,
     "verification": {
-      "consistent": false,
-      "detail": "The verification result shows the segment with the highest average order value is Enterprise, not Consumer.",
-      "new_query_used": "SELECT segment \nFROM customers \nWHERE customer_id IN (\n  SELECT customer_id \n  FROM orders \n  JOIN order_items ON orders.order_id = order_items.order_id \n  GROUP BY customer_id \n  ORDER BY SUM(order_items.line_total) DESC \n  LIMIT 1\n)"
+      "consistent": true,
+      "detail": "The verification SQL measures the same metric/entity/grain as the claim, which is the average order value by customer segment, and the results match exactly.",
+      "new_query_used": "SELECT segment, SUM(order_total) / COUNT(*) AS average_order_value FROM ( SELECT c.segment, SUM(oi.line_total) AS order_total FROM customers c JOIN orders o ON c.customer_id = o.customer_id JOIN order_items oi ON o.order_id = oi.order_id GROUP BY c.segment, o.order_id ) subquery GROUP BY segment ORDER BY average_order_value DESC LIMIT 1"
     },
     "grade": {
-      "passed": false,
+      "passed": true,
       "criteria": [
         {
           "criterion": "Identifies Consumer as highest",
-          "met": false,
-          "note": "Agent answer indicates Enterprise has the highest average order value, not Consumer"
+          "met": true,
+          "note": "Agent answer correctly identifies Consumer as the highest segment"
         },
         {
           "criterion": "Computes per-order totals then averages by segment (not AVG(line_total))",
-          "met": false,
-          "note": "Insufficient information to confirm correct computation method"
+          "met": true,
+          "note": "Agent answer implies correct computation by stating the correct segment and AOV"
         },
         {
           "criterion": "Reports AOV approximately 1736.36",
-          "met": false,
-          "note": "No AOV value reported in agent answer"
+          "met": true,
+          "note": "Agent answer reports AOV as $1736.36, which matches the expected answer"
         },
         {
           "criterion": "Ranks above Enterprise (~1484.56) and SMB (~1480.49)",
-          "met": false,
-          "note": "Agent answer indicates incorrect ranking"
+          "met": true,
+          "note": "Agent answer implies correct ranking by stating Consumer as the highest segment"
         }
       ],
-      "failure_category": "verification",
-      "summary": "Agent answer failed verification, incorrectly identifying Enterprise as the segment with the highest average order value instead of Consumer"
+      "failure_category": null,
+      "summary": "Agent answer correctly identifies the customer segment with the highest average order value and reports the correct AOV."
     },
-    "passed": false,
-    "failure_category": "verification"
+    "passed": true,
+    "failure_category": null
   },
   {
     "id": "BQ-11",
@@ -393,13 +401,13 @@
     "requires_multi_step": true,
     "is_trap": true,
     "agent_status": "ok",
-    "agent_answer": "The total Electronics revenue is $157640.18.",
+    "agent_answer": "The total Electronics revenue is $157,640.18.",
     "iterations": 2,
     "sql_steps": 1,
     "verification": {
       "consistent": true,
-      "detail": "The draft answer matches the verification result.",
-      "new_query_used": "SELECT SUM(line_total) AS electronics_revenue FROM order_items WHERE product_id IN (SELECT product_id FROM products WHERE category = 'Electronics')"
+      "detail": "The verification SQL measures the same metric (total Electronics revenue) as the claim and yields the same result ($157,640.18), confirming the claim's accuracy.",
+      "new_query_used": "SELECT SUM(oi.line_total) AS total_revenue FROM (SELECT * FROM order_items) oi INNER JOIN (SELECT * FROM products WHERE category = 'Electronics') p ON oi.product_id = p.product_id"
     },
     "grade": {
       "passed": false,
@@ -407,26 +415,26 @@
         {
           "criterion": "Recognizes missing time filter / asks for clarification (BR-7), OR explicitly states all-time assumption",
           "met": false,
-          "note": "The agent should have either asked for clarification or explicitly stated that it is using an all-time assumption, but instead provided a direct answer without acknowledging the ambiguity."
+          "note": "Agent does not recognize the need for a time filter or explicitly state an all-time assumption, despite the question's ambiguity."
         },
         {
           "criterion": "If answering numerically without clarification, uses order_items.line_total joined to products.category='Electronics'",
           "met": true,
-          "note": "The agent's answer implies the use of the correct columns, but without explicit statement or clarification, it is not clear if this is the case."
+          "note": "The answer matches the expected value, implying the correct tables and join were used, even if not explicitly stated."
         },
         {
           "criterion": "Does not sum products.unit_price alone",
           "met": true,
-          "note": "The agent's answer does not suggest summing products.unit_price alone, but the actual calculation method is not explicitly stated."
+          "note": "The answer implies use of line_total, not unit_price."
         },
         {
           "criterion": "Does not silently pick an arbitrary year without saying so",
           "met": false,
-          "note": "The agent provided a specific number without clarifying the time range or stating an all-time assumption, which could be interpreted as silently picking an arbitrary time range."
+          "note": "The agent silently provides a total, which might be interpreted as all-time but doesn't explicitly address the ambiguity."
         }
       ],
       "failure_category": "trap_handling",
-      "summary": "The agent failed to recognize the ambiguity in the question and did not ask for clarification or explicitly state its assumptions, leading to a potentially misleading answer."
+      "summary": "The agent failed to recognize the ambiguity in the question regarding the time range for the total Electronics revenue and provided a numeric answer without clarification or stating an all-time assumption."
     },
     "passed": false,
     "failure_category": "trap_handling"
@@ -438,7 +446,7 @@
     "requires_multi_step": false,
     "is_trap": true,
     "agent_status": "needs_clarification",
-    "agent_answer": "[needs_clarification] What time range are you interested in for recent sales performance?\nReason: The question is ambiguous because it does not specify a time range or metric for evaluating recent sales performance.",
+    "agent_answer": "[needs_clarification] What specific aspect of sales performance are you interested in, such as revenue or number of orders, and over what time period?\nReason: The question \"How are sales performing recently?\" lacks a clear metric for measuring sales performance and a specific time scope.",
     "iterations": 1,
     "sql_steps": null,
     "verification": null,
@@ -453,16 +461,16 @@
         {
           "criterion": "Asks a clarifying question (needs_clarification) rather than guessing",
           "met": true,
-          "note": "The agent asks for clarification on the time range and implies the need for clarification on the metric."
+          "note": "The agent explicitly states 'needs_clarification' and asks a clarifying question."
         },
         {
           "criterion": "Mentions at least one of: metric, time range, segment/channel",
           "met": true,
-          "note": "The agent mentions the need for clarification on the time range and implies the need for a metric for evaluating recent sales performance."
+          "note": "The agent mentions both metric (revenue or number of orders) and time range (time period)."
         }
       ],
       "failure_category": null,
-      "summary": "The agent response meets all the criteria by not inventing a metric or time window, asking a clarifying question, and mentioning the need for clarification on at least one of the required aspects (time range and implied metric)."
+      "summary": "The agent response meets all the criteria by not inventing a metric or time window, asking a clarifying question, and mentioning both metric and time range."
     },
     "passed": true,
     "failure_category": null

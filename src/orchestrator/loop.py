@@ -44,7 +44,8 @@ READY_TOOL_SCHEMA: dict[str, Any] = {
         "name": "ready_to_answer",
         "description": (
             "Call when evidence is sufficient for a grounded draft answer "
-            "(maps to ANSWER_READY in the LLD)."
+            "(maps to ANSWER_READY in the LLD). Include the key numeric result "
+            "and ranking basis (e.g. region plus growth amount), not only the label."
         ),
         "parameters": {
             "type": "object",
@@ -65,8 +66,11 @@ CLARIFY_TOOL_SCHEMA: dict[str, Any] = {
     "function": {
         "name": "needs_clarification",
         "description": (
-            "Call when the question is ambiguous (missing metric, unclear time range, "
-            "undefined segment, etc.). Do not guess — ask the user one clarifying question."
+            "Call ONLY when a critical metric or entity definition is missing and "
+            "no reasonable default exists (e.g. 'how are sales' with no metric). "
+            "Do NOT use for: defaultable time windows over all available data; "
+            "SQL NULL/empty aggregates (fix or interpret as zero); or questions "
+            "that already name the metric (count, sum of line_total, MoM growth)."
         ),
         "parameters": {
             "type": "object",
@@ -92,8 +96,13 @@ SYSTEM_PROMPT = (
     "You are a data-analyst agent investigating a PostgreSQL database. "
     "The schema is already loaded and provided in context. "
     "Each turn, choose exactly one tool: run_sql, ready_to_answer, or needs_clarification. "
-    "Use needs_clarification when the question is ambiguous (missing metric, time range, "
-    "filter, or definition) — never invent assumptions. "
+    "Clarification policy (BR-7): ask only when the metric/entity itself is undefined "
+    "(e.g. vague 'sales performance') or a revenue/total question has no time scope AND "
+    "you will not explicitly state an all-available-dates assumption. "
+    "Do NOT ask for a time range when the question asks for the largest/best over the "
+    "data (use all available dates). "
+    "If a query returns NULL/empty for SUM/COUNT, treat SUM of no rows as 0 or fix the "
+    "SQL (joins/filters) — never ask the user what to do with a null result. "
     "Use ready_to_answer only with a draft grounded in tool evidence. "
     "Only SELECT / WITH…SELECT queries are allowed."
 )

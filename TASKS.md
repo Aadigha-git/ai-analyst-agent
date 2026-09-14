@@ -12,3 +12,4 @@
 | WBS-4.6 | Narrative output formatter + CLI `--verbose` SQL/trace | BR-5 | — | M | Done |
 | WBS-5.1 | Evaluation benchmark question set (12 seeded-DB questions with rubrics) | BR-8 | — | M | Done |
 | WBS-5.2 | Evaluation harness + first benchmark run (`eval/results/report.md`) | BR-8 | — | M | Done |
+| WBS-5.3 | Address benchmark failure modes (metric-aligned verify, clarification policy, grader) | BR-4, BR-7, BR-8 | — | M | Done |

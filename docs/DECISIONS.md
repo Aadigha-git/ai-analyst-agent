@@ -123,3 +123,15 @@ Throwaway spike (`src/orchestrator/poc.py`, `src/tools/verifier.py`, `scripts/ru
 **Alternatives considered:** Redesign around a framework agent (rejected per ADR-003 and POC Go); treat free-text LLM prose as answers without tools (rejected: harder to eval and easier to hallucinate); continue guessing when ambiguous (rejected: violates BR-7).
 
 **Consequences:** Clear terminal statuses for CLI/eval (`ok`, `uncertain`, `needs_clarification`, `verification_failed`). Callers must surface clarification to the user. Throwaway `poc.py` remains for historical spike runs but is not the production path.
+
+## ADR-010: Verification must be metric-aligned (refine ADR-005)
+
+**Status:** Accepted
+
+**Context:** Benchmark failures BQ-02/BQ-10 showed the verifier rejecting correct drafts because the follow-up SQL measured a *different* quantity (e.g. `COUNT(DISTINCT customer_id) FROM orders` vs customer-table row count; wrong AOV definition). ADR-005 required an independent query, but not that it preserve metric/entity/grain.
+
+**Decision:** Keep independent-SQL verification, but require metric alignment: prompts forbid entity substitution; a heuristic + LLM alignment check regenerates misaligned SQL once; the compare step must set `metric_aligned` and must not overturn an evidence-backed claim solely due to a misaligned check. Separately, narrow `needs_clarification` so defaultable “all available dates” MoM questions and SQL NULL aggregates are handled in-loop rather than asked of the user.
+
+**Alternatives considered:** Drop verification on count questions (rejected: weakens BR-4); always trust investigation SQL over verify (rejected: removes the independent check); question-specific allow-lists (rejected: non-general).
+
+**Consequences:** Slightly more LLM calls per verification (alignment + possible regenerate). Residual risk: alignment heuristics/LLM can still misfire on complex grains.

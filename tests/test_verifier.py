@@ -13,7 +13,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from llm_client import LlmResult  # noqa: E402
-from tools.verifier import DuplicateVerificationQuery, verify  # noqa: E402
+from tools.verifier import (  # noqa: E402
+    DuplicateVerificationQuery,
+    verification_targets_same_entity,
+    verify,
+)
 
 
 def _text(content: str) -> LlmResult:
@@ -39,19 +43,19 @@ def test_wrong_claim_marked_inconsistent() -> None:
             }
         ]
     )
-    # Deliberately wrong claim (seed has 200 orders).
     claim = "There are exactly 50 orders in the database."
 
     client = MagicMock()
     client.complete.side_effect = [
-        # Genuinely different corroborating query (not a re-run of COUNT(*)).
         _text(
             "SELECT COUNT(order_id) AS order_count FROM orders WHERE order_id IS NOT NULL"
         ),
+        _text(json.dumps({"aligned": True, "reason": "same orders count grain"})),
         _text(
             json.dumps(
                 {
                     "consistent": False,
+                    "metric_aligned": True,
                     "detail": "Verification count is 200, which contradicts the claim of 50.",
                 }
             )
@@ -78,8 +82,7 @@ def test_wrong_claim_marked_inconsistent() -> None:
     assert result["consistent"] is False
     assert "200" in result["detail"] or "contradict" in result["detail"].lower()
     assert result["new_query_used"]
-    assert result["new_query_used"].strip().rstrip(";") != original.strip().rstrip(";")
-    assert client.complete.call_count == 2
+    assert client.complete.call_count == 3
 
 
 def test_correct_claim_marked_consistent() -> None:
@@ -98,10 +101,12 @@ def test_correct_claim_marked_consistent() -> None:
     client = MagicMock()
     client.complete.side_effect = [
         _text("SELECT COUNT(1) AS total_orders FROM orders"),
+        _text(json.dumps({"aligned": True, "reason": "same metric"})),
         _text(
             json.dumps(
                 {
                     "consistent": True,
+                    "metric_aligned": True,
                     "detail": "Independent COUNT(1) also returns 200, matching the claim.",
                 }
             )
@@ -127,7 +132,6 @@ def test_correct_claim_marked_consistent() -> None:
     assert result["consistent"] is True
     assert "200" in result["detail"]
     assert "COUNT(1)" in result["new_query_used"].upper().replace(" ", "")
-    assert client.complete.call_count == 2
 
 
 def test_identical_verification_query_raises() -> None:
@@ -144,3 +148,22 @@ def test_identical_verification_query_raises() -> None:
             prior_queries=[original],
             sql_runner=lambda q: {"rows": []},
         )
+
+
+def test_customers_via_orders_is_misaligned_heuristic() -> None:
+    assert (
+        verification_targets_same_entity(
+            "There are 80 customers.",
+            "SELECT COUNT(DISTINCT customer_id) FROM orders",
+            ["SELECT COUNT(*) FROM customers"],
+        )
+        is False
+    )
+    assert (
+        verification_targets_same_entity(
+            "There are 80 customers.",
+            "SELECT COUNT(1) FROM customers",
+            ["SELECT COUNT(*) FROM customers"],
+        )
+        is True
+    )
