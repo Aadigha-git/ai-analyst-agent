@@ -14,4 +14,18 @@
 
 ## Sprint 2
 
+**Completed:** WBS-5.1–5.3 (benchmark + harness + failure-mode fixes), WBS-6.1–6.2 (README + architecture diagrams). Live eval score **10/12**.
+
 ## Sprint 3
+
+v1.0.0 documentation/architecture closeout (README + HLD/LLD embeds).
+
+## Sprint 4 — CR-1
+
+**Shipped (v1.1.0 minor bump):** Post-v1.0.0 change request CR-1 — additive capability; CLI `ask` interface unchanged from v1.0.0.
+
+- **CR-1a:** Model-agnostic `LLMProvider` (`Nebius` / `OpenAI` / `Anthropic` / `Google`) via `LLM_PROVIDER`; BR-10 amended in **ADR-011** (not a silent rewrite of Nebius-only).
+- **CR-1b:** Bring-your-own-database clarity in README + `docs/DB.md` (demo compose vs real Postgres; per-DB `create_readonly_role.sql`; `READONLY_DATABASE_URL` / **ADR-006**).
+- **CR-1c:** TTY-only Rich CLI banner (provider/model + DB host/name, no credentials).
+
+**Release:** Tag `v1.1.0` — minor version: new providers/docs/UX without breaking the v1.0.0 CLI contract.
