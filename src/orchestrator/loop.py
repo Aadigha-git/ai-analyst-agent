@@ -12,9 +12,10 @@ import logging
 import os
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -24,9 +25,9 @@ if str(_SRC_DIR) not in sys.path:
 
 from llm_client import (  # noqa: E402
     RUN_SQL_TOOL_SCHEMA,
-    LlmResult,
-    NebiusClient,
-    ToolCall,
+    LLMProvider,
+    LLMResponse,
+    get_llm_provider,
 )
 from tools.schema_introspector import (  # noqa: E402
     clear_schema_cache,
@@ -155,18 +156,18 @@ def _plan_messages(state: InvestigationState, cap: int) -> list[dict[str, Any]]:
 
 
 def _complete_with_retries(
-    client: NebiusClient,
+    client: LLMProvider,
     *,
     system_prompt: str,
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]],
-) -> LlmResult:
-    """Retry transient Nebius failures (POC hardening)."""
+) -> LLMResponse:
+    """Retry transient LLM failures (POC hardening)."""
     attempts = max(1, _llm_retries())
     last_exc: Exception | None = None
     for attempt in range(1, attempts + 1):
         try:
-            return client.complete(
+            return client.chat(
                 system_prompt=system_prompt,
                 messages=messages,
                 tools=tools,
@@ -180,8 +181,10 @@ def _complete_with_retries(
     raise last_exc
 
 
-def _execute_run_sql(state: InvestigationState, call: ToolCall) -> dict[str, Any]:
-    query = call.arguments.get("query")
+def _execute_run_sql(
+    state: InvestigationState, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    query = arguments.get("query")
     if not isinstance(query, str) or not query.strip():
         observation = {"error": "missing query"}
         state.evidence.append({"action": "run_sql", "error": observation["error"]})
@@ -207,7 +210,7 @@ def _execute_run_sql(state: InvestigationState, call: ToolCall) -> dict[str, Any
 def investigate(
     question: str,
     *,
-    client: NebiusClient | None = None,
+    client: LLMProvider | None = None,
     max_iterations: int | None = None,
     reset_schema_cache: bool = True,
     preload_schema: bool = True,
@@ -222,7 +225,7 @@ def investigate(
     if reset_schema_cache:
         clear_schema_cache()
 
-    llm = client or NebiusClient()
+    llm = client or get_llm_provider()
     cap = max_iterations if max_iterations is not None else _max_iterations()
     state = InvestigationState(question=question)
     trace: list[dict[str, Any]] = []
@@ -276,11 +279,11 @@ def investigate(
 
         step: dict[str, Any] = {
             "iteration": state.iterations,
-            "llm_kind": result.kind,
-            "usage": result.usage,
+            "llm_kind": result.type,
+            "usage": {"total_tokens": result.tokens_used},
         }
 
-        if result.kind != "tool_call" or result.tool_call is None:
+        if result.type != "tool_call" or not result.tool_name:
             # Reflect: free text is not a terminal answer unless we are out of room.
             step["action"] = "text_fallback"
             step["text"] = result.text
@@ -289,17 +292,18 @@ def investigate(
             last_action = "text_fallback"
             continue
 
-        call = result.tool_call
-        step["action"] = call.name
-        step["arguments"] = call.arguments
-        last_action = call.name
+        tool_name = result.tool_name
+        arguments = dict(result.tool_args or {})
+        step["action"] = tool_name
+        step["arguments"] = arguments
+        last_action = tool_name
 
-        if call.name == "needs_clarification":
+        if tool_name == "needs_clarification":
             state.clarifying_question = str(
-                call.arguments.get("clarifying_question") or ""
+                arguments.get("clarifying_question") or ""
             ).strip()
             state.clarification_reason = (
-                str(call.arguments.get("reason") or "").strip() or None
+                str(arguments.get("reason") or "").strip() or None
             )
             step["observation"] = {
                 "clarifying_question": state.clarifying_question,
@@ -317,18 +321,18 @@ def investigate(
                 "state": state,
             }
 
-        if call.name == "ready_to_answer":
-            state.draft_answer = str(call.arguments.get("answer") or "").strip() or None
+        if tool_name == "ready_to_answer":
+            state.draft_answer = str(arguments.get("answer") or "").strip() or None
             step["observation"] = {"answer": state.draft_answer}
             trace.append(step)
             break
 
-        if call.name == "run_sql":
-            step["observation"] = _execute_run_sql(state, call)
+        if tool_name == "run_sql":
+            step["observation"] = _execute_run_sql(state, arguments)
             trace.append(step)
             continue
 
-        step["observation"] = {"error": f"unknown tool {call.name}"}
+        step["observation"] = {"error": f"unknown tool {tool_name}"}
         state.evidence.append(step["observation"])
         trace.append(step)
 

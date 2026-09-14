@@ -12,16 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from cli import app, present_investigation  # noqa: E402
-from llm_client import LlmResult  # noqa: E402
+from llm_client import LLMResponse  # noqa: E402
 from output_formatter import format_output, render_formatted  # noqa: E402
 
 
-def _narrative(text: str) -> LlmResult:
-    return LlmResult(
-        kind="text",
-        text=text,
-        usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
-    )
+def _narrative(text: str) -> LLMResponse:
+    return LLMResponse(type="text", text=text, tokens_used=2)
 
 
 EVIDENCE = [
@@ -39,7 +35,7 @@ EVIDENCE = [
 
 def test_default_format_output_contains_no_raw_sql() -> None:
     client = MagicMock()
-    client.complete.return_value = _narrative(
+    client.chat.return_value = _narrative(
         "There are 200 orders in the database based on the verified count."
     )
 
@@ -62,7 +58,7 @@ def test_default_format_output_contains_no_raw_sql() -> None:
 
 def test_verbose_format_output_includes_sql_and_trace() -> None:
     client = MagicMock()
-    client.complete.return_value = _narrative("There are 200 orders in the database.")
+    client.chat.return_value = _narrative("There are 200 orders in the database.")
     trace = [
         {
             "iteration": 1,
@@ -102,7 +98,9 @@ def test_cli_verbose_flag_controls_sql_visibility(monkeypatch) -> None:
         "verification": {"consistent": True},
     }
     client = MagicMock()
-    client.complete.return_value = _narrative("There are 200 orders in total.")
+    client.provider_id = "nebius"
+    client.model = "test-model"
+    client.chat.return_value = _narrative("There are 200 orders in total.")
 
     text_default = present_investigation(fake_result, verbose=False, client=client)
     assert "SELECT" not in text_default.upper()
@@ -112,15 +110,14 @@ def test_cli_verbose_flag_controls_sql_visibility(monkeypatch) -> None:
     assert "SELECT" in text_verbose.upper()
     assert "COUNT(*)" in text_verbose.upper()
 
-    monkeypatch.setattr("cli.investigate", lambda question: fake_result)
+    monkeypatch.setattr("cli.get_llm_provider", lambda: client)
+    monkeypatch.setattr("cli.investigate", lambda question, client=None: fake_result)
     monkeypatch.setattr(
         "cli.present_investigation",
         lambda result, verbose=False, client=None, console_=None: (
             present_investigation(result, verbose=verbose, client=client)
         ),
     )
-    # Ensure ask → present uses mocked LLM via patching format_output's client factory
-    monkeypatch.setattr("output_formatter.NebiusClient", lambda: client)
 
     runner = CliRunner()
     default = runner.invoke(app, ["ask", "how many orders?"])

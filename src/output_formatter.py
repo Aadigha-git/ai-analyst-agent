@@ -16,7 +16,7 @@ _SRC_DIR = Path(__file__).resolve().parent
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from llm_client import NebiusClient  # noqa: E402
+from llm_client import LLMProvider, get_llm_provider  # noqa: E402
 
 load_dotenv()
 
@@ -112,7 +112,7 @@ def format_output(
     answer: str,
     evidence: list[Any],
     *,
-    client: NebiusClient | None = None,
+    client: LLMProvider | None = None,
     verbose: bool = False,
     trace: list[Any] | None = None,
 ) -> dict[str, Any]:
@@ -121,14 +121,14 @@ def format_output(
     Default (verbose=False) omits raw SQL and tool traces from the return value
     so CLI default output stays user-facing. Pass verbose=True to include them.
     """
-    llm = client or NebiusClient()
+    llm = client or get_llm_provider()
     table = extract_table_payload(evidence)
     evidence_for_llm = {
         "answer": answer,
         "supporting_rows": table.get("rows", [])[:10],
         "columns": table.get("columns", []),
     }
-    phrased = llm.complete(
+    phrased = llm.chat(
         system_prompt=_NARRATIVE_SYSTEM,
         messages=[
             {

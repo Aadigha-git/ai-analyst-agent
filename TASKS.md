@@ -15,3 +15,7 @@
 | WBS-5.3 | Address benchmark failure modes (metric-aligned verify, clarification policy, grader) | BR-4, BR-7, BR-8 | — | M | Done |
 | WBS-6.1 | Final README (one-liner, investigation framing, Quickstart, eval score, known limits) | BR-5, BR-8 | — | S | Done |
 | WBS-6.2 | Architecture diagrams in-repo (`docs/images/` HLD + LLD; embedded in README) | — | — | S | Done |
+| CR-1 | Post-v1.0.0 change request: multi-provider LLM, BYO-DB docs, CLI banner | (see sub-items) | — | L | Done |
+| CR-1a | Model-agnostic LLMProvider (Nebius/OpenAI/Anthropic/Google) + factory + tests | BR-10 (amended) | — | L | Done |
+| CR-1b | README + DB.md: bring-your-own-database clarity; Quickstart multi-provider env | BR-2, BR-9 | — | S | Done |
+| CR-1c | CLI Rich banner (provider/model + DB host/name; TTY-only) | UX | — | S | Done |

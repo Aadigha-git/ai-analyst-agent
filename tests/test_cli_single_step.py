@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "src"))
 load_dotenv(ROOT / ".env")
 
 from cli import app, run_single_step  # noqa: E402
-from llm_client import LlmResult, ToolCall  # noqa: E402
+from llm_client import LLMResponse  # noqa: E402
 from tools.schema_introspector import clear_schema_cache  # noqa: E402
 
 
@@ -35,14 +35,11 @@ def test_run_single_step_executes_mocked_run_sql_tool_call(
     readonly_configured: None,
 ) -> None:
     client = MagicMock()
-    client.complete.return_value = LlmResult(
-        kind="tool_call",
-        tool_call=ToolCall(
-            id="call_test",
-            name="run_sql",
-            arguments={"query": "SELECT COUNT(*) AS order_count FROM orders"},
-        ),
-        usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+    client.chat.return_value = LLMResponse(
+        type="tool_call",
+        tool_name="run_sql",
+        tool_args={"query": "SELECT COUNT(*) AS order_count FROM orders"},
+        tokens_used=2,
     )
 
     payload = run_single_step("How many orders are there?", client=client)
@@ -54,8 +51,8 @@ def test_run_single_step_executes_mocked_run_sql_tool_call(
     assert payload["result"]["rows"][0]["order_count"] == 200
     assert payload["llm"]["usage"]["total_tokens"] == 2
 
-    client.complete.assert_called_once()
-    kwargs = client.complete.call_args.kwargs
+    client.chat.assert_called_once()
+    kwargs = client.chat.call_args.kwargs
     assert "tools" in kwargs
     assert kwargs["tools"][0]["function"]["name"] == "run_sql"
     user_msg = kwargs["messages"][0]["content"]
@@ -82,14 +79,16 @@ def test_cli_ask_command_prints_narrative(monkeypatch: pytest.MonkeyPatch) -> No
         ),
         "verification": {"consistent": True},
     }
-    monkeypatch.setattr("cli.investigate", lambda question: fake_result)
     client = MagicMock()
-    client.complete.return_value = LlmResult(
-        kind="text",
+    client.provider_id = "nebius"
+    client.model = "test-model"
+    client.chat.return_value = LLMResponse(
+        type="text",
         text="There are 200 orders in the database.",
-        usage={"total_tokens": 2},
+        tokens_used=2,
     )
-    monkeypatch.setattr("output_formatter.NebiusClient", lambda: client)
+    monkeypatch.setattr("cli.get_llm_provider", lambda: client)
+    monkeypatch.setattr("cli.investigate", lambda question, client=None: fake_result)
 
     runner = CliRunner()
     result = runner.invoke(app, ["ask", "ping"])

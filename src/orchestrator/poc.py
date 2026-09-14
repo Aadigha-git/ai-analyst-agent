@@ -19,7 +19,7 @@ _SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from llm_client import RUN_SQL_TOOL_SCHEMA, NebiusClient  # noqa: E402
+from llm_client import RUN_SQL_TOOL_SCHEMA, LLMProvider, get_llm_provider  # noqa: E402
 from tools.schema_introspector import (  # noqa: E402
     clear_schema_cache,
     introspect_schema,
@@ -117,7 +117,7 @@ def _plan_messages(state: PocState) -> list[dict[str, Any]]:
 def run_poc(
     question: str,
     *,
-    client: NebiusClient | None = None,
+    client: LLMProvider | None = None,
     max_iterations: int | None = None,
     reset_schema_cache: bool = True,
 ) -> dict[str, Any]:
@@ -125,7 +125,7 @@ def run_poc(
     if reset_schema_cache:
         clear_schema_cache()
 
-    llm = client or NebiusClient()
+    llm = client or get_llm_provider()
     cap = max_iterations if max_iterations is not None else _max_iterations()
     state = PocState(question=question)
     trace: list[dict[str, Any]] = []
@@ -157,12 +157,12 @@ def run_poc(
     while state.iterations < cap:
         state.iterations += 1
         try:
-            result = llm.complete(
+            result = llm.chat(
                 system_prompt=SYSTEM_PROMPT,
                 messages=_plan_messages(state),
                 tools=POC_TOOLS,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             step = {
                 "iteration": state.iterations,
                 "action": "llm_error",
@@ -175,11 +175,11 @@ def run_poc(
 
         step = {
             "iteration": state.iterations,
-            "llm_kind": result.kind,
-            "usage": result.usage,
+            "llm_kind": result.type,
+            "usage": {"total_tokens": result.tokens_used},
         }
 
-        if result.kind != "tool_call" or result.tool_call is None:
+        if result.type != "tool_call" or not result.tool_name:
             step["action"] = "text_fallback"
             step["text"] = result.text
             if result.text and state.iterations >= cap:
@@ -190,11 +190,12 @@ def run_poc(
             trace.append(step)
             continue
 
-        call = result.tool_call
-        step["action"] = call.name
-        step["arguments"] = call.arguments
+        tool_name = result.tool_name
+        arguments = dict(result.tool_args or {})
+        step["action"] = tool_name
+        step["arguments"] = arguments
 
-        if call.name == "introspect_schema":
+        if tool_name == "introspect_schema":
             state.schema = introspect_schema()
             observation = {
                 "tables": [t["name"] for t in state.schema.get("tables", [])],
@@ -206,8 +207,8 @@ def run_poc(
             )
             step["observation"] = observation
 
-        elif call.name == "run_sql":
-            query = call.arguments.get("query")
+        elif tool_name == "run_sql":
+            query = arguments.get("query")
             if not isinstance(query, str) or not query.strip():
                 obs = {"error": "missing query"}
                 state.evidence.append({"action": "run_sql", "error": obs["error"]})
@@ -230,15 +231,15 @@ def run_poc(
                     state.evidence.append({"action": "run_sql", "error": err})
                     step["observation"] = err
 
-        elif call.name == "ready_to_answer":
-            answer = call.arguments.get("answer")
+        elif tool_name == "ready_to_answer":
+            answer = arguments.get("answer")
             state.draft_answer = str(answer or "").strip() or None
             step["observation"] = {"answer": state.draft_answer}
             trace.append(step)
             break
 
         else:
-            step["observation"] = {"error": f"unknown tool {call.name}"}
+            step["observation"] = {"error": f"unknown tool {tool_name}"}
             state.evidence.append(step["observation"])
 
         trace.append(step)

@@ -12,7 +12,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from llm_client import LlmResult  # noqa: E402
+from llm_client import LLMResponse  # noqa: E402
 from tools.verifier import (  # noqa: E402
     DuplicateVerificationQuery,
     verification_targets_same_entity,
@@ -20,12 +20,8 @@ from tools.verifier import (  # noqa: E402
 )
 
 
-def _text(content: str) -> LlmResult:
-    return LlmResult(
-        kind="text",
-        text=content,
-        usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
-    )
+def _text(content: str) -> LLMResponse:
+    return LLMResponse(type="text", text=content, tokens_used=2)
 
 
 def test_wrong_claim_marked_inconsistent() -> None:
@@ -46,7 +42,7 @@ def test_wrong_claim_marked_inconsistent() -> None:
     claim = "There are exactly 50 orders in the database."
 
     client = MagicMock()
-    client.complete.side_effect = [
+    client.chat.side_effect = [
         _text(
             "SELECT COUNT(order_id) AS order_count FROM orders WHERE order_id IS NOT NULL"
         ),
@@ -82,7 +78,7 @@ def test_wrong_claim_marked_inconsistent() -> None:
     assert result["consistent"] is False
     assert "200" in result["detail"] or "contradict" in result["detail"].lower()
     assert result["new_query_used"]
-    assert client.complete.call_count == 3
+    assert client.chat.call_count == 3
 
 
 def test_correct_claim_marked_consistent() -> None:
@@ -99,7 +95,7 @@ def test_correct_claim_marked_consistent() -> None:
     claim = "There are 200 orders in the database."
 
     client = MagicMock()
-    client.complete.side_effect = [
+    client.chat.side_effect = [
         _text("SELECT COUNT(1) AS total_orders FROM orders"),
         _text(json.dumps({"aligned": True, "reason": "same metric"})),
         _text(
@@ -138,7 +134,7 @@ def test_identical_verification_query_raises() -> None:
     """ADR-005: identical SQL must raise, not silently re-run."""
     original = "SELECT COUNT(*) FROM orders"
     client = MagicMock()
-    client.complete.return_value = _text("SELECT COUNT(*) FROM orders")
+    client.chat.return_value = _text("SELECT COUNT(*) FROM orders")
 
     with pytest.raises(DuplicateVerificationQuery, match="must differ"):
         verify(

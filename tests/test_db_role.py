@@ -39,25 +39,31 @@ def test_readonly_role_select_succeeds(readonly_conn: psycopg.Connection) -> Non
 def test_readonly_role_insert_raises_permission_error(
     readonly_conn: psycopg.Connection,
 ) -> None:
-    with readonly_conn.cursor() as cur:
-        with pytest.raises(pg_errors.InsufficientPrivilege):
-            cur.execute(
-                "INSERT INTO orders (customer_id, order_date, channel) "
-                "VALUES (1, CURRENT_DATE, 'web')"
-            )
+    with (
+        readonly_conn.cursor() as cur,
+        pytest.raises(pg_errors.InsufficientPrivilege),
+    ):
+        cur.execute(
+            "INSERT INTO orders (customer_id, order_date, channel) "
+            "VALUES (1, CURRENT_DATE, 'web')"
+        )
 
 
 def test_readonly_role_update_raises_permission_error(
     readonly_conn: psycopg.Connection,
 ) -> None:
-    with readonly_conn.cursor() as cur:
-        with pytest.raises(pg_errors.InsufficientPrivilege):
-            cur.execute("UPDATE orders SET channel = 'web' WHERE order_id = 1")
+    with (
+        readonly_conn.cursor() as cur,
+        pytest.raises(pg_errors.InsufficientPrivilege),
+    ):
+        cur.execute("UPDATE orders SET channel = 'web' WHERE order_id = 1")
 
 
 def test_readonly_role_drop_table_raises_permission_error(
     readonly_conn: psycopg.Connection,
 ) -> None:
-    with readonly_conn.cursor() as cur:
-        with pytest.raises(pg_errors.InsufficientPrivilege):
-            cur.execute("DROP TABLE orders")
+    with (
+        readonly_conn.cursor() as cur,
+        pytest.raises(pg_errors.InsufficientPrivilege),
+    ):
+        cur.execute("DROP TABLE orders")

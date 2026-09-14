@@ -11,15 +11,16 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from llm_client import LlmResult, ToolCall  # noqa: E402
+from llm_client import LLMResponse  # noqa: E402
 from orchestrator.loop import InvestigationState, investigate  # noqa: E402
 
 
-def _tool(name: str, arguments: dict | None = None, call_id: str = "c1") -> LlmResult:
-    return LlmResult(
-        kind="tool_call",
-        tool_call=ToolCall(id=call_id, name=name, arguments=arguments or {}),
-        usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+def _tool(name: str, arguments: dict | None = None) -> LLMResponse:
+    return LLMResponse(
+        type="tool_call",
+        tool_name=name,
+        tool_args=arguments or {},
+        tokens_used=2,
     )
 
 
@@ -45,9 +46,9 @@ def test_multi_step_question_completes_within_cap(
 ) -> None:
     """Normal path: run_sql then ready_to_answer within MAX_ITERATIONS."""
     client = MagicMock()
-    client.complete.side_effect = [
-        _tool("run_sql", {"query": "SELECT COUNT(*) AS n FROM orders"}, "c1"),
-        _tool("ready_to_answer", {"answer": "There are 200 orders."}, "c2"),
+    client.chat.side_effect = [
+        _tool("run_sql", {"query": "SELECT COUNT(*) AS n FROM orders"}),
+        _tool("ready_to_answer", {"answer": "There are 200 orders."}),
     ]
 
     monkeypatch.setattr(
@@ -83,7 +84,7 @@ def test_multi_step_question_completes_within_cap(
     assert result["iterations"] == 2
     assert result["sql_steps"] == 1
     assert isinstance(result["state"], InvestigationState)
-    assert client.complete.call_count == 2
+    assert client.chat.call_count == 2
 
 
 def test_never_ready_returns_uncertain_not_infinite(
@@ -92,8 +93,8 @@ def test_never_ready_returns_uncertain_not_infinite(
     """Mocked LLM that never says ready must stop at MAX_ITERATIONS."""
     cap = 3
     client = MagicMock()
-    client.complete.side_effect = [
-        _tool("run_sql", {"query": f"SELECT {i}"}, f"c{i}") for i in range(cap + 5)
+    client.chat.side_effect = [
+        _tool("run_sql", {"query": f"SELECT {i}"}) for i in range(cap + 5)
     ]
 
     monkeypatch.setattr(
@@ -107,7 +108,6 @@ def test_never_ready_returns_uncertain_not_infinite(
         },
     )
     monkeypatch.setattr("orchestrator.loop.clear_schema_cache", lambda: None)
-    # verify must not be called when never ready
     verify_mock = MagicMock()
     monkeypatch.setattr("orchestrator.loop.verify", verify_mock)
 
@@ -122,7 +122,7 @@ def test_never_ready_returns_uncertain_not_infinite(
     assert result["answer"] is None
     assert result["iterations"] == cap
     assert "iteration cap" in (result.get("message") or "").lower()
-    assert client.complete.call_count == cap
+    assert client.chat.call_count == cap
     verify_mock.assert_not_called()
 
 
@@ -131,7 +131,7 @@ def test_ambiguous_plan_triggers_clarification_branch(
 ) -> None:
     """NEEDS_CLARIFICATION stops the loop and returns a clarifying question."""
     client = MagicMock()
-    client.complete.return_value = _tool(
+    client.chat.return_value = _tool(
         "needs_clarification",
         {
             "clarifying_question": "Which metric should I use — order count or revenue?",
@@ -154,4 +154,4 @@ def test_ambiguous_plan_triggers_clarification_branch(
     assert result["iterations"] == 1
     assert result["reason"]
     run_sql_mock.assert_not_called()
-    assert client.complete.call_count == 1
+    assert client.chat.call_count == 1

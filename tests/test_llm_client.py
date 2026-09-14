@@ -1,4 +1,4 @@
-"""Unit tests for NebiusClient (mocked HTTP — no real API key required)."""
+"""Unit tests for NebiusProvider (mocked HTTP — no real API key required)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from llm_client import RUN_SQL_TOOL_SCHEMA, NebiusClient  # noqa: E402
+from llm_client import RUN_SQL_TOOL_SCHEMA, NebiusProvider  # noqa: E402
 
 
 def _mock_response(payload: dict) -> MagicMock:
@@ -23,7 +23,7 @@ def _mock_response(payload: dict) -> MagicMock:
     return response
 
 
-def test_complete_returns_tool_call_and_logs_usage(
+def test_chat_returns_tool_call_and_logs_usage(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     session = MagicMock()
@@ -53,7 +53,7 @@ def test_complete_returns_tool_call_and_logs_usage(
         }
     )
 
-    client = NebiusClient(
+    client = NebiusProvider(
         api_key="test-key",
         base_url="https://example.test/v1",
         model="test-model",
@@ -61,17 +61,16 @@ def test_complete_returns_tool_call_and_logs_usage(
     )
 
     with caplog.at_level(logging.INFO, logger="llm_client"):
-        result = client.complete(
+        result = client.chat(
             system_prompt="You are a helpful analyst.",
             messages=[{"role": "user", "content": "How many orders?"}],
             tools=[RUN_SQL_TOOL_SCHEMA],
         )
 
-    assert result.kind == "tool_call"
-    assert result.tool_call is not None
-    assert result.tool_call.name == "run_sql"
-    assert result.tool_call.arguments == {"query": "SELECT 1 AS n"}
-    assert result.usage["total_tokens"] == 18
+    assert result.type == "tool_call"
+    assert result.tool_name == "run_sql"
+    assert result.tool_args == {"query": "SELECT 1 AS n"}
+    assert result.tokens_used == 18
     assert "nebius_token_usage" in caplog.text
     assert "prompt_tokens=11" in caplog.text
 
@@ -82,7 +81,7 @@ def test_complete_returns_tool_call_and_logs_usage(
     assert kwargs["json"]["tools"] == [RUN_SQL_TOOL_SCHEMA]
 
 
-def test_complete_returns_final_text() -> None:
+def test_chat_returns_final_text() -> None:
     session = MagicMock()
     session.post.return_value = _mock_response(
         {
@@ -90,20 +89,20 @@ def test_complete_returns_final_text() -> None:
             "usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5},
         }
     )
-    client = NebiusClient(
+    client = NebiusProvider(
         api_key="k", base_url="https://example.test/v1", session=session
     )
-    result = client.complete(
+    result = client.chat(
         system_prompt="sys",
         messages=[{"role": "user", "content": "hi"}],
         tools=None,
     )
-    assert result.kind == "text"
+    assert result.type == "text"
     assert result.text == "I need a clarifying question."
-    assert result.usage["total_tokens"] == 5
+    assert result.tokens_used == 5
 
 
 def test_missing_api_key_raises() -> None:
-    client = NebiusClient(api_key="", base_url="https://example.test/v1")
+    client = NebiusProvider(api_key="", base_url="https://example.test/v1")
     with pytest.raises(RuntimeError, match="NEBIUS_API_KEY"):
-        client.complete(system_prompt="s", messages=[{"role": "user", "content": "q"}])
+        client.chat(system_prompt="s", messages=[{"role": "user", "content": "q"}])

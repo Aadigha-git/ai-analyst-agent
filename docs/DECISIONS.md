@@ -135,3 +135,16 @@ Throwaway spike (`src/orchestrator/poc.py`, `src/tools/verifier.py`, `scripts/ru
 **Alternatives considered:** Drop verification on count questions (rejected: weakens BR-4); always trust investigation SQL over verify (rejected: removes the independent check); question-specific allow-lists (rejected: non-general).
 
 **Consequences:** Slightly more LLM calls per verification (alignment + possible regenerate). Residual risk: alignment heuristics/LLM can still misfire on complex grains.
+
+## ADR-011: Model-agnostic LLM provider abstraction (amends BR-10)
+
+**Status:** Accepted
+
+**Context:** v1 was hardwired to Nebius per BR-10 (“operate within Nebius program resources”). Users want to bring their own hosted provider (OpenAI, Anthropic, Google) without forking the orchestrator. This is a deliberate post-v1.0.0 scope change (CR-1a), not silent scope creep — BR-10 is amended explicitly here.
+
+**Decision:** Introduce an `LLMProvider` ABC with `chat(...) -> LLMResponse`, concrete adapters (`NebiusProvider`, `OpenAIProvider`, `AnthropicProvider`, `GoogleProvider`), and `get_llm_provider()` selected via `LLM_PROVIDER` (default `nebius`). Internal tool schemas stay OpenAI-shaped (docs/API.md); each adapter translates to its native function-calling format. Only the selected provider’s API key is required.
+
+**Alternatives considered:** Keep Nebius-only (rejected: blocks BYO-provider users); a LangChain-style universal client (rejected: same opacity/dependency concern as ADR-003).
+
+**Consequences:** BR-10 is amended from “must use Nebius” to “must support at least one hosted provider, Nebius by default.” Each new provider is one more adapter to maintain and test. Orchestrator/verifier/formatter depend on the interface, not Nebius HTTP details.
+

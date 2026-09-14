@@ -18,19 +18,24 @@ Internal tool contracts the Agent Orchestrator calls (Phase 3 Document 5). The s
 
 ## LLM client (`src/llm_client.py`)
 
-Nebius AI Builder OpenAI-compatible chat completions wrapper.
+Model-agnostic provider layer (CR-1a / ADR-011). Call sites depend on ``LLMProvider``, not a Nebius-specific client.
 
 | Symbol | Interface | Notes |
 | --- | --- | --- |
-| `NebiusClient(api_key?, base_url?, model?, session?)` | Reads `NEBIUS_API_KEY`, `NEBIUS_BASE_URL`, optional `NEBIUS_MODEL` from `.env` | Thin `requests` client; inject `session` for tests |
-| `chat_completions(messages, model?, tools?, **kwargs) -> dict` | Raw POST `{base}/chat/completions` | Logs `prompt_tokens` / `completion_tokens` / `total_tokens` on every call |
-| `complete(system_prompt, messages, tools?) -> LlmResult` | Prepends system message; returns normalized result | `LlmResult.kind` is `"tool_call"` or `"text"` |
-| `LlmResult` | `kind`, `text?`, `tool_call?`, `usage`, `raw` | `ToolCall` has `id`, `name`, `arguments` (parsed JSON object) |
-| `RUN_SQL_TOOL_SCHEMA` | OpenAI tools item: `{"type":"function","function":{name,description,parameters}}` | Shared with the minimal CLI single-step path |
+| `LLMProvider` (ABC) | `chat(system_prompt, messages, tools?) -> LLMResponse` | Internal `tools` use the OpenAI tools schema from this doc; each provider translates natively |
+| `LLMResponse` | `type` (`tool_call` \| `text`), `tool_name`, `tool_args`, `text`, `tokens_used` | Normalized across providers |
+| `get_llm_provider()` | Reads `LLM_PROVIDER` (`nebius` \| `openai` \| `anthropic` \| `google`, default `nebius`) | Requires only the selected provider’s API key; optional `LLM_MODEL` override |
+| `NebiusProvider` | OpenAI-compatible HTTP (`requests`) | Default; same behavior as v1 Nebius client |
+| `OpenAIProvider` | `openai` SDK `tools` param | Needs `OPENAI_API_KEY` |
+| `AnthropicProvider` | `anthropic` SDK `tools` + `input_schema`; `tool_use` blocks | Needs `ANTHROPIC_API_KEY` |
+| `GoogleProvider` | `google-genai` `function_declarations`; `functionCall` parts | Needs `GOOGLE_API_KEY` |
+| `RUN_SQL_TOOL_SCHEMA` | OpenAI tools item: `{"type":"function","function":{name,description,parameters}}` | Shared internal tool schema |
+
+Legacy aliases: `NebiusClient` (= `NebiusProvider`), `LlmResult` / `ToolCall` (prefer `LLMResponse`).
 
 ### Minimal CLI single-step (`run_single_step`)
 
-Still available for POC-style wiring tests. The default `ask` command runs `investigate()` then `format_output()` / Rich rendering.
+Still available for POC-style wiring tests. The default `ask` command prints a TTY-only Rich banner (provider/model + DB host/name), then runs `investigate()` → `format_output()` / Rich rendering.
 
 ## Orchestrator loop (`src/orchestrator/loop.py`)
 

@@ -24,7 +24,7 @@ _SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from llm_client import LlmResult, NebiusClient  # noqa: E402
+from llm_client import LLMProvider, LLMResponse, get_llm_provider  # noqa: E402
 from tools.sql_executor import run_sql  # noqa: E402
 
 load_dotenv()
@@ -235,7 +235,7 @@ def _parse_comparison(raw_text: str) -> tuple[bool, str, bool | None]:
 
 
 def _llm_alignment_check(
-    llm: NebiusClient,
+    llm: LLMProvider,
     *,
     claim: str,
     new_query: str,
@@ -243,7 +243,7 @@ def _llm_alignment_check(
 ) -> bool:
     """Ask the LLM whether verification SQL is metric-aligned; default True on error."""
     try:
-        result = llm.complete(
+        result = llm.chat(
             system_prompt=_ALIGN_SYSTEM,
             messages=[
                 {
@@ -265,7 +265,7 @@ def _llm_alignment_check(
 
 
 def _propose_verification_sql(
-    llm: NebiusClient,
+    llm: LLMProvider,
     *,
     claim: str,
     evidence_ref: str,
@@ -274,7 +274,7 @@ def _propose_verification_sql(
 ) -> str:
     prior_block = "\n".join(f"- {q}" for q in originals) if originals else "(none)"
     extra = f"\n\nRegeneration feedback:\n{feedback}\n" if feedback else ""
-    gen: LlmResult = llm.complete(
+    gen: LLMResponse = llm.chat(
         system_prompt=_VERIFY_SYSTEM,
         messages=[
             {
@@ -297,7 +297,7 @@ def verify(
     claim: str,
     evidence_ref: str,
     *,
-    client: NebiusClient | None = None,
+    client: LLMProvider | None = None,
     prior_queries: list[str] | None = None,
     sql_runner: Any | None = None,
 ) -> dict[str, Any]:
@@ -307,7 +307,7 @@ def verify(
     Guardrails: exactly one new query; raises ``DuplicateVerificationQuery`` if
     the proposed SQL matches an original query after normalization.
     """
-    llm = client or NebiusClient()
+    llm = client or get_llm_provider()
     execute_sql = sql_runner or run_sql
     originals = _original_queries(evidence_ref, prior_queries)
 
@@ -356,7 +356,7 @@ def verify(
             "new_query_used": new_query,
         }
 
-    compare: LlmResult = llm.complete(
+    compare: LLMResponse = llm.chat(
         system_prompt=_COMPARE_SYSTEM,
         messages=[
             {

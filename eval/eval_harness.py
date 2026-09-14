@@ -21,7 +21,7 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(ROOT / ".env")
 
-from llm_client import LlmResult, NebiusClient  # noqa: E402
+from llm_client import LLMProvider, LLMResponse, get_llm_provider  # noqa: E402
 from orchestrator.loop import investigate  # noqa: E402
 from tools.schema_introspector import clear_schema_cache  # noqa: E402
 
@@ -105,7 +105,7 @@ def grade_with_llm(
     agent_answer: str,
     agent_status: str,
     *,
-    client: NebiusClient,
+    client: LLMProvider,
 ) -> dict[str, Any]:
     payload = {
         "question": question["question"],
@@ -116,7 +116,7 @@ def grade_with_llm(
         "agent_status": agent_status,
         "agent_answer": agent_answer,
     }
-    result: LlmResult = client.complete(
+    result: LLMResponse = client.chat(
         system_prompt=_GRADER_SYSTEM,
         messages=[
             {
@@ -173,7 +173,7 @@ def grade_with_llm(
 def run_one(
     question: dict[str, Any],
     *,
-    client: NebiusClient,
+    client: LLMProvider,
 ) -> dict[str, Any]:
     clear_schema_cache()
     qid = question["id"]
@@ -312,7 +312,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.limit and args.limit > 0:
         questions = questions[: args.limit]
 
-    client = NebiusClient()
+    client = get_llm_provider()
     rows: list[dict[str, Any]] = []
     for q in questions:
         row = run_one(q, client=client)
