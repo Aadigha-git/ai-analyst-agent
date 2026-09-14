@@ -13,3 +13,5 @@
 | WBS-5.1 | Evaluation benchmark question set (12 seeded-DB questions with rubrics) | BR-8 | — | M | Done |
 | WBS-5.2 | Evaluation harness + first benchmark run (`eval/results/report.md`) | BR-8 | — | M | Done |
 | WBS-5.3 | Address benchmark failure modes (metric-aligned verify, clarification policy, grader) | BR-4, BR-7, BR-8 | — | M | Done |
+| WBS-6.1 | Final README (one-liner, investigation framing, Quickstart, eval score, known limits) | BR-5, BR-8 | — | S | Done |
+| WBS-6.2 | Architecture diagrams in-repo (`docs/images/` HLD + LLD; embedded in README) | — | — | S | Done |
