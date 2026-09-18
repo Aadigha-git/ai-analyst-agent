@@ -1,0 +1,18 @@
+{
+  "description": "PR CI smoke subset of benchmark_v2.json (ADR-008 / BR-13)",
+  "benchmark": "eval/benchmark_v2.json",
+  "question_ids": [
+    "BQ-01",
+    "BQ-08",
+    "BQ-09",
+    "BQ-11",
+    "BQ-12"
+  ],
+  "coverage": {
+    "BQ-01": "single-step factual count",
+    "BQ-08": "multi-step join (category × channel revenue)",
+    "BQ-09": "multi-step join (segment × channel count)",
+    "BQ-11": "trap + glossary (Electronics revenue / default_time_window disclosure)",
+    "BQ-12": "trap + glossary (ambiguous sales → clarification)"
+  }
+}

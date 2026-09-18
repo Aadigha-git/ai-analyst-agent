@@ -49,7 +49,16 @@ More detail: [`docs/API.md`](docs/API.md), [`docs/DECISIONS.md`](docs/DECISIONS.
 
 ## Evaluation
 
-Latest benchmark: **[10/12](eval/results/report.md)** on a 12-question seeded-DB suite (multi-step + trap questions included).
+Latest full benchmark: **[10/12](eval/results/report.md)** on the v1.0 12-question seeded-DB suite (see `eval/benchmark_questions.json`). The expanded v2 suite lives in `eval/benchmark_v2.json` (30 questions).
+
+## CI
+
+Pull requests run two gates:
+
+- **Unit CI** (`.github/workflows/ci.yml` `test` job): lint + pytest against a seeded Postgres service. No live LLM calls (provider key is a placeholder).
+- **Smoke regression** (`eval-smoke` job): runs `eval/run_smoke.py` on a fixed 5-question subset (`eval/smoke_subset.json`) with a **real** default-provider LLM call and fails if the score drops below `eval/results/smoke_baseline.json`. Requires repository secret `NEBIUS_API_KEY` (or the matching key if `LLM_PROVIDER` is changed). Update the baseline only manually via `python eval/run_smoke.py --update-baseline` — never from CI.
+
+The full ~30-question v2 benchmark remains a **manual / nightly** run (`python eval/eval_harness.py --benchmark eval/benchmark_v2.json`), not a PR blocker.
 
 ## Known Limitations
 

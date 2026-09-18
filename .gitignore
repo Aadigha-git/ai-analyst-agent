@@ -3,7 +3,10 @@ __pycache__/
 *.pyc
 .env
 logs/
-eval/results/
+eval/results/*
+!eval/results/smoke_baseline.json
+!eval/results/report.md
+
 .DS_Store
 *.egg-info/
 dist/

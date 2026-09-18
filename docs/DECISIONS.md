@@ -160,4 +160,18 @@ Throwaway spike (`src/orchestrator/poc.py`, `src/tools/verifier.py`, `scripts/ru
 
 **Consequences / follow-up (v2-2):** Explicit assumption disclosure closes the BQ-11 silent-default gap from the v1 eval report. Glossary entries remain per-dataset — BYO databases must author their own terms.
 
+## ADR-008 (v2.0): CI smoke subset as PR regression gate
+
+**Status:** Accepted
+
+**Context:** A full ~30-question live-LLM benchmark is too slow and costly to block every PR, but silent quality regressions (e.g. disabling verification) must still be caught before merge. *(Numbering note: this is the v2.0 ADR-008 from the v2 scope document; v1 ADR-008 above remains the OpenAI tools-format decision.)*
+
+**Decision:** Hand-pick a 5-question smoke subset (`eval/smoke_subset.json`: one single-step, two multi-step, two trap/glossary) from `eval/benchmark_v2.json`. Store the green score in `eval/results/smoke_baseline.json`. `eval/run_smoke.py` runs only that subset and exits non-zero if the score drops below the baseline. `--update-baseline` is manual-only (refuses to write from a partial run) and is never invoked in CI. The `eval-smoke` GitHub Actions job runs on every PR with live model calls.
+
+**CI secret requirement:** The smoke job needs a real default-provider API key as a repository secret (`NEBIUS_API_KEY` while `LLM_PROVIDER=nebius`; otherwise the matching provider key). Unit-test CI continues to use a placeholder key and must not depend on live LLM calls.
+
+**Alternatives considered:** Run the full v2 suite on every PR (rejected: latency/cost); mock-only smoke in CI (rejected: would not catch prompt/provider regressions); auto-update baseline on main (rejected: hides regressions).
+
+**Consequences:** PRs are gated on a small live subset; full benchmark remains offline/nightly. Operators must configure the provider secret or the smoke job cannot authenticate.
+
 

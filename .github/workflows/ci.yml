@@ -48,3 +48,58 @@ jobs:
           psql "$DATABASE_URL" -f scripts/create_readonly_role.sql
 
       - run: pytest --maxfail=1 --disable-warnings -q
+
+  # Smoke regression gate (ADR-008 / BR-13): live LLM calls against the seeded DB.
+  # Requires repository secret NEBIUS_API_KEY (default provider). If LLM_PROVIDER is
+  # changed, set the matching provider key secret instead. Unlike the unit-test job
+  # above, this job is not mockable — it exercises real plan/execute/verify turns.
+  eval-smoke:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: analyst
+          POSTGRES_PASSWORD: analyst
+          POSTGRES_DB: analyst
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd="pg_isready -U analyst -d analyst"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql://analyst:analyst@localhost:5432/analyst
+      READONLY_DATABASE_URL: postgresql://analyst_readonly:change_me@localhost:5432/analyst
+      LLM_PROVIDER: nebius
+      NEBIUS_API_KEY: ${{ secrets.NEBIUS_API_KEY }}
+      NEBIUS_TIMEOUT_SECONDS: "180"
+      NEBIUS_MAX_RETRIES: "3"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      - name: Require NEBIUS_API_KEY repository secret
+        run: |
+          if [ -z "$NEBIUS_API_KEY" ]; then
+            echo "Set repository secret NEBIUS_API_KEY for the eval-smoke job (ADR-008)."
+            exit 1
+          fi
+
+      - name: Seed sample DB and create read-only role
+        run: |
+          psql "$DATABASE_URL" -f sample_db/seed.sql
+          psql "$DATABASE_URL" -f scripts/create_readonly_role.sql
+
+      - name: Run smoke subset against baseline
+        run: python eval/run_smoke.py
+        timeout-minutes: 30

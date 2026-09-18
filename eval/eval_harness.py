@@ -32,6 +32,7 @@ logging.basicConfig(
 logger = logging.getLogger("eval_harness")
 
 BENCHMARK_PATH = ROOT / "eval" / "benchmark_questions.json"
+BENCHMARK_V2_PATH = ROOT / "eval" / "benchmark_v2.json"
 RESULTS_DIR = ROOT / "eval" / "results"
 REPORT_PATH = RESULTS_DIR / "report.md"
 RAW_PATH = RESULTS_DIR / "latest_run.json"
@@ -61,16 +62,36 @@ _GRADER_SYSTEM = (
 
 
 def load_benchmark(path: Path = BENCHMARK_PATH) -> list[dict[str, Any]]:
+    """Load a benchmark file (v1 JSON array or v2 `{questions: [...]}` object)."""
     data = json.loads(path.read_text())
-    if not isinstance(data, list):
-        raise TypeError("benchmark_questions.json must be a JSON array")
-    return data
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict) and isinstance(data.get("questions"), list):
+        return data["questions"]
+    raise TypeError(
+        f"{path} must be a JSON array or an object with a 'questions' array"
+    )
 
 
 def extract_final_answer(result: dict[str, Any]) -> str:
     status = result.get("status")
     if status == "ok":
-        return str(result.get("answer") or "").strip()
+        answer = str(result.get("answer") or "").strip()
+        defaults = [
+            str(d).strip()
+            for d in (result.get("defaults_used") or [])
+            if str(d).strip()
+        ]
+        if not defaults:
+            return answer
+        lines = [answer] if answer else []
+        for item in defaults:
+            lines.append(
+                item
+                if item.lower().startswith("assumption:")
+                else f"Assumption: {item}"
+            )
+        return "\n".join(lines).strip()
     if status == "needs_clarification":
         parts = [
             f"[needs_clarification] {result.get('clarifying_question') or ''}".strip()
@@ -289,8 +310,41 @@ def write_report(rows: list[dict[str, Any]], path: Path = REPORT_PATH) -> None:
     logger.info("Wrote %s", path)
 
 
+def run_benchmark(
+    questions: list[dict[str, Any]],
+    *,
+    client: LLMProvider | None = None,
+    report_path: Path = REPORT_PATH,
+    raw_path: Path = RAW_PATH,
+) -> tuple[list[dict[str, Any]], int, int]:
+    """Run ``questions`` through the agent + grader; return (rows, passed, total)."""
+    llm = client or get_llm_provider()
+    rows: list[dict[str, Any]] = []
+    for q in questions:
+        row = run_one(q, client=llm)
+        rows.append(row)
+        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        raw_path.write_text(json.dumps(rows, indent=2, default=str))
+        logger.info(
+            "%s => %s (%s)",
+            row["id"],
+            "PASS" if row["passed"] else "FAIL",
+            row.get("failure_category"),
+        )
+
+    write_report(rows, path=report_path)
+    passed = sum(1 for r in rows if r["passed"])
+    return rows, passed, len(rows)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run benchmark eval harness")
+    parser.add_argument(
+        "--benchmark",
+        type=Path,
+        default=BENCHMARK_PATH,
+        help="Path to benchmark JSON (v1 array or v2 object with questions)",
+    )
     parser.add_argument(
         "--limit",
         type=int,
@@ -305,32 +359,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    questions = load_benchmark()
+    questions = load_benchmark(args.benchmark)
     if args.ids.strip():
         wanted = {x.strip() for x in args.ids.split(",") if x.strip()}
         questions = [q for q in questions if q["id"] in wanted]
+        missing = wanted - {q["id"] for q in questions}
+        if missing:
+            raise SystemExit(f"Unknown question id(s): {', '.join(sorted(missing))}")
     if args.limit and args.limit > 0:
         questions = questions[: args.limit]
 
-    client = get_llm_provider()
-    rows: list[dict[str, Any]] = []
-    for q in questions:
-        row = run_one(q, client=client)
-        rows.append(row)
-        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-        RAW_PATH.write_text(json.dumps(rows, indent=2, default=str))
-        logger.info(
-            "%s => %s (%s)",
-            row["id"],
-            "PASS" if row["passed"] else "FAIL",
-            row.get("failure_category"),
-        )
-
-    write_report(rows)
-    passed = sum(1 for r in rows if r["passed"])
-    print(f"Score: {passed}/{len(rows)}")
+    rows, passed, total = run_benchmark(questions)
+    print(f"Score: {passed}/{total}")
     print(f"Report: {REPORT_PATH}")
-    return 0 if passed == len(rows) else 1
+    return 0 if passed == total else 1
 
 
 if __name__ == "__main__":
