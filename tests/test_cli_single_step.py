@@ -88,7 +88,10 @@ def test_cli_ask_command_prints_narrative(monkeypatch: pytest.MonkeyPatch) -> No
         tokens_used=2,
     )
     monkeypatch.setattr("cli.get_llm_provider", lambda: client)
-    monkeypatch.setattr("cli.investigate", lambda question, client=None: fake_result)
+    monkeypatch.setattr(
+        "cli.investigate",
+        lambda question, client=None, run_logger=None, **kwargs: fake_result,
+    )
 
     runner = CliRunner()
     result = runner.invoke(app, ["ask", "ping"])

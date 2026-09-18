@@ -111,10 +111,13 @@ def test_cli_verbose_flag_controls_sql_visibility(monkeypatch) -> None:
     assert "COUNT(*)" in text_verbose.upper()
 
     monkeypatch.setattr("cli.get_llm_provider", lambda: client)
-    monkeypatch.setattr("cli.investigate", lambda question, client=None: fake_result)
+    monkeypatch.setattr(
+        "cli.investigate",
+        lambda question, client=None, run_logger=None, **kwargs: fake_result,
+    )
     monkeypatch.setattr(
         "cli.present_investigation",
-        lambda result, verbose=False, client=None, console_=None: (
+        lambda result, verbose=False, client=None, console_=None, **kwargs: (
             present_investigation(result, verbose=verbose, client=client)
         ),
     )
