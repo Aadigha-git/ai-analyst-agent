@@ -28,6 +28,7 @@ from llm_client import (  # noqa: E402
 )
 from orchestrator.loop import investigate  # noqa: E402
 from output_formatter import format_output, render_formatted  # noqa: E402
+from run_logger import RunLogger  # noqa: E402
 from tools.schema_introspector import introspect_schema  # noqa: E402
 from tools.sql_executor import run_sql  # noqa: E402
 
@@ -197,12 +198,29 @@ def ask(
         "-v",
         help="Also show underlying SQL and tool trace (off by default).",
     ),
+    no_redact: bool = typer.Option(
+        False,
+        "--no-redact",
+        help=(
+            "Disable row-value redaction in logs/run_*.jsonl (local debugging only; "
+            "never use in CI smoke)."
+        ),
+    ),
 ) -> None:
     """Investigate a question and print a narrative answer with a supporting table."""
     llm = get_llm_provider()
     print_cli_banner(llm)
-    result = investigate(question, client=llm)
-    present_investigation(result, verbose=verbose, client=llm)
+    # Redaction is ON by default (BR-17). --no-redact is local-debug only.
+    session = RunLogger(
+        redact=not no_redact,
+        provider=getattr(llm, "provider_id", None),
+        model=getattr(llm, "model", None),
+    )
+    try:
+        result = investigate(question, client=llm, run_logger=session)
+        present_investigation(result, verbose=verbose, client=llm)
+    finally:
+        session.close()
 
 
 @app.callback()

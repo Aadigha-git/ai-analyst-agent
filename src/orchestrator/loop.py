@@ -30,6 +30,7 @@ from llm_client import (  # noqa: E402
     LLMResponse,
     get_llm_provider,
 )
+from run_logger import RunLogger  # noqa: E402
 from tools.schema_introspector import (  # noqa: E402
     clear_schema_cache,
     introspect_schema,
@@ -231,11 +232,15 @@ def investigate(
     preload_schema: bool = True,
     run_verification: bool = True,
     schema_loader: Callable[[], dict[str, Any]] | None = None,
+    run_logger: RunLogger | None = None,
 ) -> dict[str, Any]:
     """Plan → execute → reflect loop bounded by MAX_ITERATIONS.
 
     Returns a result dict with ``status`` one of:
     ``ok``, ``uncertain``, ``needs_clarification``, ``verification_failed``.
+
+    When ``run_logger`` is provided, each plan / tool_call / observe / verify step
+    is appended to that session's JSONL trace (redaction controlled by the logger).
     """
     if reset_schema_cache:
         clear_schema_cache()
@@ -245,6 +250,7 @@ def investigate(
     state = InvestigationState(question=question)
     trace: list[dict[str, Any]] = []
     load_schema = schema_loader or introspect_schema
+    session = run_logger
 
     if preload_schema:
         try:
@@ -274,6 +280,7 @@ def investigate(
 
     while state.iterations < cap:
         state.iterations += 1
+        plan_started = time.perf_counter()
         try:
             result = _complete_with_retries(
                 llm,
@@ -282,6 +289,7 @@ def investigate(
                 tools=LOOP_TOOLS,
             )
         except Exception as exc:  # noqa: BLE001
+            plan_ms = (time.perf_counter() - plan_started) * 1000
             step = {
                 "iteration": state.iterations,
                 "action": "llm_error",
@@ -289,8 +297,28 @@ def investigate(
             }
             state.evidence.append(step["observation"])
             trace.append(step)
+            if session is not None:
+                session.record(
+                    "plan",
+                    latency_ms=plan_ms,
+                    tokens_used=0,
+                    payload={"error": str(exc), "iteration": state.iterations},
+                )
             last_action = "llm_error"
             continue
+
+        plan_ms = (time.perf_counter() - plan_started) * 1000
+        if session is not None:
+            session.record(
+                "plan",
+                latency_ms=plan_ms,
+                tokens_used=result.tokens_used,
+                payload={
+                    "iteration": state.iterations,
+                    "llm_kind": result.type,
+                    "tool_name": result.tool_name,
+                },
+            )
 
         step: dict[str, Any] = {
             "iteration": state.iterations,
@@ -313,6 +341,14 @@ def investigate(
         step["arguments"] = arguments
         last_action = tool_name
 
+        if session is not None:
+            session.record(
+                "tool_call",
+                latency_ms=0,
+                tokens_used=result.tokens_used,
+                payload={"tool": tool_name, "arguments": arguments},
+            )
+
         if tool_name == "needs_clarification":
             state.clarifying_question = str(
                 arguments.get("clarifying_question") or ""
@@ -325,6 +361,13 @@ def investigate(
                 "reason": state.clarification_reason,
             }
             trace.append(step)
+            if session is not None:
+                session.record(
+                    "observe",
+                    latency_ms=0,
+                    tokens_used=0,
+                    payload={"tool": tool_name, "observation": step["observation"]},
+                )
             return {
                 "status": "needs_clarification",
                 "question": question,
@@ -334,6 +377,7 @@ def investigate(
                 "iterations": state.iterations,
                 "trace": trace,
                 "state": state,
+                "run_log_path": str(session.path) if session is not None else None,
             }
 
         if tool_name == "ready_to_answer":
@@ -344,16 +388,39 @@ def investigate(
                 "defaults_used": list(state.defaults_used),
             }
             trace.append(step)
+            if session is not None:
+                session.record(
+                    "observe",
+                    latency_ms=0,
+                    tokens_used=0,
+                    payload={"tool": tool_name, "observation": step["observation"]},
+                )
             break
 
         if tool_name == "run_sql":
+            obs_started = time.perf_counter()
             step["observation"] = _execute_run_sql(state, arguments)
+            obs_ms = (time.perf_counter() - obs_started) * 1000
             trace.append(step)
+            if session is not None:
+                session.record(
+                    "observe",
+                    latency_ms=obs_ms,
+                    tokens_used=0,
+                    payload={"tool": tool_name, "observation": step["observation"]},
+                )
             continue
 
         step["observation"] = {"error": f"unknown tool {tool_name}"}
         state.evidence.append(step["observation"])
         trace.append(step)
+        if session is not None:
+            session.record(
+                "observe",
+                latency_ms=0,
+                tokens_used=0,
+                payload={"tool": tool_name, "observation": step["observation"]},
+            )
 
     if not state.draft_answer or last_action != "ready_to_answer":
         return {
@@ -366,10 +433,13 @@ def investigate(
             "trace": trace,
             "verification": None,
             "state": state,
+            "run_log_path": str(session.path) if session is not None else None,
         }
 
     verification = None
     if run_verification:
+        verify_started = time.perf_counter()
+        verify_tokens = 0
         try:
             verification = verify(
                 state.draft_answer,
@@ -383,6 +453,14 @@ def investigate(
                 "detail": f"Verifier failed: {exc}",
                 "new_query_used": "",
             }
+        verify_ms = (time.perf_counter() - verify_started) * 1000
+        if session is not None:
+            session.record(
+                "verify",
+                latency_ms=verify_ms,
+                tokens_used=verify_tokens,
+                payload={"verification": verification},
+            )
 
         if not verification.get("consistent"):
             return {
@@ -395,6 +473,7 @@ def investigate(
                 "verification": verification,
                 "defaults_used": list(state.defaults_used),
                 "state": state,
+                "run_log_path": str(session.path) if session is not None else None,
             }
 
     return {
@@ -407,4 +486,5 @@ def investigate(
         "verification": verification,
         "defaults_used": list(state.defaults_used),
         "state": state,
+        "run_log_path": str(session.path) if session is not None else None,
     }

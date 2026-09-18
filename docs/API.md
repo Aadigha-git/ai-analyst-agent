@@ -15,6 +15,34 @@ Internal tool contracts the Agent Orchestrator calls (Phase 3 Document 5). The s
 | Flag | Default | Behavior |
 | --- | --- | --- |
 | `--verbose` / `-v` | off | Show underlying SQL and tool trace after the narrative + table |
+| `--no-redact` | off | Disable row-value redaction in `logs/run_*.jsonl` (local debugging only; never use in CI smoke) |
+
+## Run logger (`src/run_logger.py`)
+
+Structured session traces for offline eval / replay (v2 ADR-010 / BR-15, BR-17). Each `ask` session writes `logs/run_<UTC-timestamp>.jsonl` — one JSON object per step.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `step_type` | `"plan"` \| `"tool_call"` \| `"observe"` \| `"verify"` | Emitted by the orchestrator around LLM plan turns, tool selection, tool results, and verification |
+| `timestamp` | ISO-8601 UTC string | When the step was recorded |
+| `latency_ms` | int | Wall-clock duration for that step |
+| `tokens_used` | int | Tokens reported by the provider for the step (0 when N/A) |
+| `cost_estimate_usd` | float | Approximate USD from a static per-provider/model price table (estimate only) |
+| `payload` | object | Step details; **row values redacted by default** |
+
+**Default redaction** replaces tabular `rows` with a shape placeholder:
+
+```json
+{"_redacted": true, "row_count": 2, "columns": ["region", "n"]}
+```
+
+SQL text, tool names, and non-row fields are kept. Pass `--no-redact` to persist raw row values locally; the smoke-gate CI job never enables this flag.
+
+| Symbol | Interface | Notes |
+| --- | --- | --- |
+| `RunLogger(redact=True, …)` | writes JSONL under `logs/` | `redact=False` ≡ CLI `--no-redact` |
+| `redact_payload(obj)` | recursive redact of `rows` lists | Used when `redact=True` |
+| `estimate_cost_usd(tokens, provider?, model?)` | float | Keyed off `LLM_PROVIDER` / `LLM_MODEL` |
 
 ## LLM client (`src/llm_client.py`)
 
@@ -44,7 +72,7 @@ Production plan → execute → reflect loop (Phase 3 Document 3 LLD), with POC 
 | Symbol | Interface | Notes |
 | --- | --- | --- |
 | `InvestigationState` | `question`, `schema`, `evidence`, `iterations`, `defaults_used` (+ draft / clarification fields) | Matches LLD state object; `defaults_used` records glossary fallbacks applied while planning (BR-12) |
-| `investigate(question, …) -> dict` | Bounded by `MAX_ITERATIONS` (default 8) | Preloads schema; injects glossary context via `format_glossary_context()` on each plan turn; records `defaults_used`; retries LLM via `NEBIUS_MAX_RETRIES` |
+| `investigate(question, …) -> dict` | Bounded by `MAX_ITERATIONS` (default 8) | Preloads schema; injects glossary context via `format_glossary_context()` on each plan turn; records `defaults_used`; retries LLM via `NEBIUS_MAX_RETRIES`; optional `run_logger=` for JSONL tracing |
 | Plan tools | `run_sql`, `ready_to_answer` (ANSWER_READY), `needs_clarification` | Exactly one tool per plan turn |
 | Result `status` | `ok` \| `uncertain` \| `needs_clarification` \| `verification_failed` | Cap → `uncertain`; ambiguity → clarifying question (BR-7); verify after draft |
 
