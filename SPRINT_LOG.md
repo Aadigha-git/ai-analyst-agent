@@ -53,3 +53,11 @@ v1.0.0 documentation/architecture closeout (README + HLD/LLD embeds).
 ## CR-2
 
 During v2.0 wrap-up, the packaged cross-provider comparison failed for unrelated vendor account reasons (Nebius `403` while the key was being regenerated, OpenAI out of credits, Google `404` on the configured model) — not defects in the `LLMProvider` abstraction (v1.1 ADR-011). **Decision (ADR-011 CR-2):** narrow the packaged demo to `--compare-models` over configurable Nebius-hosted models (`NEBIUS_COMPARE_MODELS`); keep `--compare-providers` as a legacy opt-in. A new Nebius API key resolves the `403`. Smoke stayed **5/5** (default model now `Qwen/Qwen3-235B-A22B-Instruct-2507`); full suite **28/30** in `report_v2.md`; packaged comparison **20 / 20 / 26** (Nano-30B / gpt-oss-120b / Qwen-235B) in `comparison_v2.md`.
+
+## v2.0 Sprint 3
+
+**Shipped (v2.0.0):** Closed the v2 cycle — MCP server + guardrail parity (v2-9/v2-10), docs refresh (v2-11), CR-2 Nebius multi-model comparison, and release polish/tag (v2-12). End-to-end product surface is CLI + MCP over the same investigate → verify → narrative path, with glossary/assumption disclosure, JSONL tracing/replay, chart/export, versioned eval, and a CI smoke gate.
+
+**Scores:** v1.1.0 baseline remains **10/12** on `eval/benchmark_questions.json`. v2.0 live suite on Nebius `Qwen/Qwen3-235B-A22B-Instruct-2507` scores **28/30** (`report_v2.md`); smoke gate holds **5/5**. Cross-model headline (`comparison_v2.md`): Nano-30B **20/30**, gpt-oss-120b **20/30**, Qwen-235B **26/30** — larger Nebius-hosted models win on multi-step and glossary/trap items, with remaining gaps on verification SQL and a few joins.
+
+**Deferred (honest scope cut):** Multi-agent specialization, an enterprise access model, and a hosted web interface stay out of v2.0 per the Scope Statement — they would pull the project away from a self-hosted, single-orchestrator portfolio demo into product/platform work (authz, tenancy, UX chrome) that is not needed to prove investigation-over-SQL, evaluation discipline, or MCP packaging. Those belong in a later productization track, not this release.

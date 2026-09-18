@@ -35,5 +35,5 @@
 | v2-9 | MCP server (`ask_data_question` tool) | BR-18 | — | L | Done |
 | v2-10 | MCP guardrail-parity test | BR-18 | — | M | Done |
 | v2-11 | README / docs update for v2.0 (deliverables refreshed under CR-2) | — | — | S | Done |
-| v2-12 | Final polish, tag v2.0.0 | All | — | M | Planned |
+| v2-12 | Final polish, tag v2.0.0 | All | — | M | Done |
 | CR-2 | Scope amendment: packaged comparison uses Nebius-hosted models only (`--compare-models`); LLMProvider abstraction unchanged | BR-14 (amended), ADR-011 (CR-2) | — | M | Done |
