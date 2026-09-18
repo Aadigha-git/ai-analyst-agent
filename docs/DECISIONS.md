@@ -148,3 +148,16 @@ Throwaway spike (`src/orchestrator/poc.py`, `src/tools/verifier.py`, `scripts/ru
 
 **Consequences:** BR-10 is amended from “must use Nebius” to “must support at least one hosted provider, Nebius by default.” Each new provider is one more adapter to maintain and test. Orchestrator/verifier/formatter depend on the interface, not Nebius HTTP details.
 
+## ADR-007 (v2.0): Lightweight semantic layer via config-driven glossary
+
+**Status:** Accepted
+
+**Context:** The v1 evaluation report showed the agent silently defaulting to an all-time window on an open-ended question (BQ-11) rather than disclosing the assumption. A full semantic-layer product (dbt metrics, Cube, LookML) would address this but is heavier than a portfolio-scale project needs. *(Numbering note: this is the v2.0 ADR-007 from the v2 scope document; v1 ADR-007 above remains the SELECT-validation decision.)*
+
+**Decision:** Introduce a small YAML glossary (`config/glossary.yaml`) loaded into the orchestrator’s planning context (v2-1 / BR-11). When planning applies a glossary default to resolve ambiguity, record it on `InvestigationState.defaults_used` and append an explicit `Assumption:` line in `format_output` (v2-2 / BR-12).
+
+**Alternatives considered:** Full semantic-layer product (rejected: overkill for the seeded schema / self-hosted single-config philosophy); prompt-only “always state assumptions” (rejected: BQ-11 showed this does not hold without a structural fallback).
+
+**Consequences / follow-up (v2-2):** Explicit assumption disclosure closes the BQ-11 silent-default gap from the v1 eval report. Glossary entries remain per-dataset — BYO databases must author their own terms.
+
+

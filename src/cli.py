@@ -166,12 +166,16 @@ def present_investigation(
     state = result.get("state")
     evidence = list(getattr(state, "evidence", None) or [])
     answer = result.get("answer") or ""
+    defaults_used = list(
+        getattr(state, "defaults_used", None) or result.get("defaults_used") or []
+    )
     formatted = format_output(
         answer,
         evidence,
         client=client,
         verbose=verbose,
         trace=result.get("trace"),
+        defaults_used=defaults_used,
     )
     if status == "verification_failed":
         out.print(

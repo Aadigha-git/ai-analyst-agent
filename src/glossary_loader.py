@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,23 @@ logger = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_GLOSSARY_PATH = _REPO_ROOT / "config" / "glossary.yaml"
+
+# Heuristic: question already specifies a time window (no glossary default needed).
+_TIME_RANGE_HINT = re.compile(
+    r"\b("
+    r"20\d{2}|q[1-4]|ytd|mtd|trailing|"
+    r"last\s+\d+|past\s+\d+|previous\s+\d+|"
+    r"between\s+|since\s+|until\s+|from\s+20|"
+    r"january|february|march|april|may|june|july|august|september|october|november|december|"
+    r"\d+\s*(day|week|month|year)s?"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_METRIC_HINT = re.compile(
+    r"\b(revenue|total|sum|count|average|avg|aov|sales|orders?|customers?|products?)\b",
+    re.IGNORECASE,
+)
 
 
 def load_glossary(path: Path | str | None = None) -> dict[str, dict[str, Any]]:
@@ -90,3 +108,53 @@ def format_glossary_context(
                 continue
             lines.append(f"  {key}: {value}")
     return "\n".join(lines)
+
+
+def detect_defaults_used(
+    question: str,
+    glossary: dict[str, dict[str, Any]] | None = None,
+    *,
+    path: Path | str | None = None,
+) -> list[str]:
+    """Return human-readable glossary defaults that apply to ``question``.
+
+    Used to populate ``InvestigationState.defaults_used`` when planning leans on
+    glossary fallbacks (e.g. all-dates window for open-ended revenue totals).
+    """
+    entries = glossary if glossary is not None else load_glossary(path)
+    if not entries or not (question or "").strip():
+        return []
+
+    q = question.strip()
+    used: list[str] = []
+
+    if "default_time_window" in entries and _METRIC_HINT.search(q):
+        if not _TIME_RANGE_HINT.search(q):
+            used.append("using all available dates, since no time range was specified")
+
+    if "revenue" in entries and re.search(r"\brevenue\b", q, re.IGNORECASE):
+        used.append("revenue means sum of order_items.line_total")
+
+    if "average_order_value" in entries and re.search(
+        r"\b(aov|average order value)\b", q, re.IGNORECASE
+    ):
+        used.append(
+            "average order value is the mean of per-order SUM(line_total), "
+            "not AVG(line_total)"
+        )
+
+    if "active_customer" in entries and re.search(
+        r"\bactive customers?\b", q, re.IGNORECASE
+    ):
+        used.append(
+            "active customer means a customer with at least one order in the "
+            "trailing 90 days"
+        )
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in used:
+        if item not in seen:
+            seen.add(item)
+            out.append(item)
+    return out

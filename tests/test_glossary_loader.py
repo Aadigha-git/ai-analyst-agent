@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from glossary_loader import (  # noqa: E402
     DEFAULT_GLOSSARY_PATH,
+    detect_defaults_used,
     format_glossary_context,
     load_glossary,
 )
@@ -44,6 +45,17 @@ def test_format_glossary_context_includes_terms() -> None:
     assert "revenue:" in block
     assert "default_time_window:" in block
     assert "default_join:" in block
+
+
+def test_detect_defaults_used_for_open_ended_revenue() -> None:
+    used = detect_defaults_used("What is total Electronics revenue?")
+    assert any("all available dates" in u for u in used)
+    assert any("revenue" in u.lower() for u in used)
+
+
+def test_detect_defaults_skips_time_window_when_year_specified() -> None:
+    used = detect_defaults_used("What is total Electronics revenue in 2024?")
+    assert not any("all available dates" in u for u in used)
 
 
 def test_missing_glossary_file_returns_empty_without_raising(

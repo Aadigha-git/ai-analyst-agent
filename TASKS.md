@@ -25,7 +25,7 @@
 | ID | Description | Requirement ID | Owner | Estimate | Status |
 | --- | --- | --- | --- | --- | --- |
 | v2-1 | Semantic glossary format + loader (`config/glossary.yaml` → planning context) | BR-11 | — | M | Done |
-| v2-2 | Assumption-disclosure behavior in narrative output | BR-12 | — | M | Planned |
+| v2-2 | Assumption-disclosure behavior in narrative output | BR-12 | — | M | Done |
 | v2-3 | Expanded, versioned benchmark suite (~30 questions) | BR-13 | — | L | Planned |
 | v2-4 | CI smoke-subset regression gate | BR-13 | — | M | Planned |
 | v2-5 | Structured tracing + redaction | BR-15, BR-17 | — | L | Planned |

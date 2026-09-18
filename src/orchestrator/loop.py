@@ -23,7 +23,7 @@ _SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from glossary_loader import format_glossary_context  # noqa: E402
+from glossary_loader import detect_defaults_used, format_glossary_context  # noqa: E402
 from llm_client import (  # noqa: E402
     RUN_SQL_TOOL_SCHEMA,
     LLMProvider,
@@ -124,6 +124,14 @@ class InvestigationState:
     draft_answer: str | None = None
     clarifying_question: str | None = None
     clarification_reason: str | None = None
+    defaults_used: list[str] = field(default_factory=list)
+
+
+def _record_glossary_defaults(state: InvestigationState) -> None:
+    """Record glossary defaults consulted for this question (BR-12)."""
+    for item in detect_defaults_used(state.question):
+        if item not in state.defaults_used:
+            state.defaults_used.append(item)
 
 
 def _max_iterations() -> int:
@@ -144,6 +152,7 @@ def _plan_messages(state: InvestigationState, cap: int) -> list[dict[str, Any]]:
         if state.schema is not None
         else "(schema unavailable)"
     )
+    _record_glossary_defaults(state)
     glossary_part = format_glossary_context()
     glossary_block = f"{glossary_part}\n\n" if glossary_part else ""
     return [
@@ -329,7 +338,11 @@ def investigate(
 
         if tool_name == "ready_to_answer":
             state.draft_answer = str(arguments.get("answer") or "").strip() or None
-            step["observation"] = {"answer": state.draft_answer}
+            _record_glossary_defaults(state)
+            step["observation"] = {
+                "answer": state.draft_answer,
+                "defaults_used": list(state.defaults_used),
+            }
             trace.append(step)
             break
 
@@ -380,6 +393,7 @@ def investigate(
                 "sql_steps": len(state.prior_queries),
                 "trace": trace,
                 "verification": verification,
+                "defaults_used": list(state.defaults_used),
                 "state": state,
             }
 
@@ -391,5 +405,6 @@ def investigate(
         "sql_steps": len(state.prior_queries),
         "trace": trace,
         "verification": verification,
+        "defaults_used": list(state.defaults_used),
         "state": state,
     }

@@ -115,11 +115,15 @@ def format_output(
     client: LLMProvider | None = None,
     verbose: bool = False,
     trace: list[Any] | None = None,
+    defaults_used: list[str] | None = None,
 ) -> dict[str, Any]:
     """Produce narrative text plus a compact supporting table payload.
 
     Default (verbose=False) omits raw SQL and tool traces from the return value
     so CLI default output stays user-facing. Pass verbose=True to include them.
+
+    When ``defaults_used`` is non-empty (glossary fallbacks from planning), append
+    one ``Assumption:`` line per default so silent defaults are never hidden (BR-12).
     """
     llm = client or get_llm_provider()
     table = extract_table_payload(evidence)
@@ -145,10 +149,19 @@ def format_output(
         tools=None,
     )
     narrative = _sanitize_narrative(phrased.text or answer)
+    assumptions = [str(a).strip() for a in (defaults_used or []) if str(a).strip()]
+    for assumption in assumptions:
+        line = (
+            assumption
+            if assumption.lower().startswith("assumption:")
+            else f"Assumption: {assumption}"
+        )
+        narrative = f"{narrative}\n{line}" if narrative else line
 
     payload: dict[str, Any] = {
         "narrative": narrative,
         "table": table,
+        "defaults_used": assumptions,
     }
     if verbose:
         payload["sql_queries"] = extract_sql_queries(evidence)

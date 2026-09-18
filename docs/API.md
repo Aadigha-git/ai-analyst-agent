@@ -8,7 +8,7 @@ Internal tool contracts the Agent Orchestrator calls (Phase 3 Document 5). The s
 | `run_sql(query: str)` | `query` — a single SELECT statement | `rows` (list of dicts, capped), `row_count`, `execution_time_seconds`, `truncated` (bool), `columns` | Rejects any non-SELECT **before** contacting Postgres (`SqlValidationError`); connection uses `SET TRANSACTION READ ONLY`; enforces `ROW_LIMIT` (default 500; injects `LIMIT` or truncates with `truncated=True`) and `QUERY_TIMEOUT_SECONDS` via `statement_timeout` (default 10s) |
 | `run_stats(operation: str, params: object, data_ref: str)` | `operation` — one of `aggregate`, `rolling_mean`, `outlier_zscore`, `correlation`, `segment`; `params` — operation-specific args; `data_ref` — key/index into prior in-memory results (`data_store` or orchestrator `evidence`) | `{operation, params, data_ref, result}` where `result` is records or a summary object | Allow-list only via fixed `OPERATIONS` dict (ADR-004); `StatsOperationNotAllowed` for anything else; **never** `exec`/`eval`; no DB connection — optional kw-only `evidence` / `data_store` for resolution |
 | `verify(claim: str, evidence_ref: str)` | `claim` — draft conclusion; `evidence_ref` — supporting evidence (JSON/text; used to recover original SQL) | `{consistent: bool, detail: str, new_query_used: str}` | Exactly one new query; **raises** `DuplicateVerificationQuery` if proposed SQL normalizes equal to an original; optional kw-only `prior_queries`, `client`, `sql_runner` for orchestrator/tests |
-| `format_output(answer: str, evidence: list)` | `answer` — verified conclusion; `evidence` — supporting data points / tool results | `{narrative, table}` ; with `verbose=True` also `{sql_queries, trace}` | LLM phrases a short plain-language narrative (no SQL); compact supporting table for Rich CLI rendering; default omits raw SQL/tool trace; `--verbose` / `verbose=True` includes them |
+| `format_output(answer: str, evidence: list, *, defaults_used?)` | `answer` — verified conclusion; `evidence` — supporting data points / tool results; optional `defaults_used` — glossary fallback phrases from planning | `{narrative, table, defaults_used}` ; with `verbose=True` also `{sql_queries, trace}` | LLM phrases a short plain-language narrative (no SQL); when `defaults_used` is non-empty, appends `Assumption: …` line(s) (BR-12); compact supporting table for Rich CLI rendering; default omits raw SQL/tool trace |
 
 ## CLI (`python -m src.cli ask`)
 
@@ -43,8 +43,8 @@ Production plan → execute → reflect loop (Phase 3 Document 3 LLD), with POC 
 
 | Symbol | Interface | Notes |
 | --- | --- | --- |
-| `InvestigationState` | `question`, `schema`, `evidence`, `iterations` (+ draft / clarification fields) | Matches LLD state object |
-| `investigate(question, …) -> dict` | Bounded by `MAX_ITERATIONS` (default 8) | Preloads schema; injects glossary context via `format_glossary_context()` on each plan turn; retries LLM via `NEBIUS_MAX_RETRIES` |
+| `InvestigationState` | `question`, `schema`, `evidence`, `iterations`, `defaults_used` (+ draft / clarification fields) | Matches LLD state object; `defaults_used` records glossary fallbacks applied while planning (BR-12) |
+| `investigate(question, …) -> dict` | Bounded by `MAX_ITERATIONS` (default 8) | Preloads schema; injects glossary context via `format_glossary_context()` on each plan turn; records `defaults_used`; retries LLM via `NEBIUS_MAX_RETRIES` |
 | Plan tools | `run_sql`, `ready_to_answer` (ANSWER_READY), `needs_clarification` | Exactly one tool per plan turn |
 | Result `status` | `ok` \| `uncertain` \| `needs_clarification` \| `verification_failed` | Cap → `uncertain`; ambiguity → clarifying question (BR-7); verify after draft |
 
@@ -58,7 +58,7 @@ Config-driven business terms loaded into every orchestrator **plan** turn (v2 AD
 | --- | --- | --- |
 | `config/glossary.yaml` | Map of `term` → `{definition, default_join?, …}` | Seeded for the sample retail schema; BYO DBs should add their own entries |
 | `load_glossary(path?)` | `dict[str, dict]` | Missing/unreadable file → `{}` + warning (never raises for missing file) |
-| `format_glossary_context(glossary?, path?)` | `str` | Empty string when no entries; otherwise a bullet list for the planning prompt |
+| `detect_defaults_used(question, glossary?)` | `list[str]` | Human-readable assumption phrases for glossary fallbacks that apply to the question |
 
 **Context block shape** (included alongside the schema snapshot in the plan user message):
 
