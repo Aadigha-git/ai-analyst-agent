@@ -44,11 +44,33 @@ Production plan → execute → reflect loop (Phase 3 Document 3 LLD), with POC 
 | Symbol | Interface | Notes |
 | --- | --- | --- |
 | `InvestigationState` | `question`, `schema`, `evidence`, `iterations` (+ draft / clarification fields) | Matches LLD state object |
-| `investigate(question, …) -> dict` | Bounded by `MAX_ITERATIONS` (default 8) | Preloads schema; retries Nebius via `NEBIUS_MAX_RETRIES` |
+| `investigate(question, …) -> dict` | Bounded by `MAX_ITERATIONS` (default 8) | Preloads schema; injects glossary context via `format_glossary_context()` on each plan turn; retries LLM via `NEBIUS_MAX_RETRIES` |
 | Plan tools | `run_sql`, `ready_to_answer` (ANSWER_READY), `needs_clarification` | Exactly one tool per plan turn |
 | Result `status` | `ok` \| `uncertain` \| `needs_clarification` \| `verification_failed` | Cap → `uncertain`; ambiguity → clarifying question (BR-7); verify after draft |
 
 `needs_clarification` arguments: `clarifying_question` (required), `reason` (optional).
+
+## Semantic glossary (`src/glossary_loader.py`)
+
+Config-driven business terms loaded into every orchestrator **plan** turn (v2 ADR-007 / BR-11).
+
+| Symbol | Interface | Notes |
+| --- | --- | --- |
+| `config/glossary.yaml` | Map of `term` → `{definition, default_join?, …}` | Seeded for the sample retail schema; BYO DBs should add their own entries |
+| `load_glossary(path?)` | `dict[str, dict]` | Missing/unreadable file → `{}` + warning (never raises for missing file) |
+| `format_glossary_context(glossary?, path?)` | `str` | Empty string when no entries; otherwise a bullet list for the planning prompt |
+
+**Context block shape** (included alongside the schema snapshot in the plan user message):
+
+```text
+Semantic glossary (canonical business terms — prefer these over guessing):
+- average_order_value: mean of per-order totals, ...
+  default_join: orders JOIN order_items ON ...
+- default_time_window: when a question doesn't specify a date range, default to all available data
+- revenue: sum of order_items.line_total
+  default_join: order_items JOIN products ON ...
+- …
+```
 
 ### `run_stats` params (allow-listed)
 

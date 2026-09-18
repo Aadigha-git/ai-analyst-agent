@@ -19,3 +19,20 @@
 | CR-1a | Model-agnostic LLMProvider (Nebius/OpenAI/Anthropic/Google) + factory + tests | BR-10 (amended) | — | L | Done |
 | CR-1b | README + DB.md: bring-your-own-database clarity; Quickstart multi-provider env | BR-2, BR-9 | — | S | Done |
 | CR-1c | CLI Rich banner (provider/model + DB host/name; TTY-only) | UX | — | S | Done |
+
+## v2.0
+
+| ID | Description | Requirement ID | Owner | Estimate | Status |
+| --- | --- | --- | --- | --- | --- |
+| v2-1 | Semantic glossary format + loader (`config/glossary.yaml` → planning context) | BR-11 | — | M | Done |
+| v2-2 | Assumption-disclosure behavior in narrative output | BR-12 | — | M | Planned |
+| v2-3 | Expanded, versioned benchmark suite (~30 questions) | BR-13 | — | L | Planned |
+| v2-4 | CI smoke-subset regression gate | BR-13 | — | M | Planned |
+| v2-5 | Structured tracing + redaction | BR-15, BR-17 | — | L | Planned |
+| v2-6 | Local run replay command | BR-16 | — | M | Planned |
+| v2-7 | Cross-model evaluation comparison | BR-14 | — | M | Planned |
+| v2-8 | Chart recommendation + CSV/XLSX export | BR-19 | — | M | Planned |
+| v2-9 | MCP server (`ask_data_question` tool) | BR-18 | — | L | Planned |
+| v2-10 | MCP guardrail-parity test | BR-18 | — | M | Planned |
+| v2-11 | README / docs update for v2.0 | — | — | S | Planned |
+| v2-12 | Final polish, tag v2.0.0 | All | — | M | Planned |

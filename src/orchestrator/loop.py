@@ -23,6 +23,7 @@ _SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
+from glossary_loader import format_glossary_context  # noqa: E402
 from llm_client import (  # noqa: E402
     RUN_SQL_TOOL_SCHEMA,
     LLMProvider,
@@ -96,6 +97,8 @@ LOOP_TOOLS = [RUN_SQL_TOOL_SCHEMA, READY_TOOL_SCHEMA, CLARIFY_TOOL_SCHEMA]
 SYSTEM_PROMPT = (
     "You are a data-analyst agent investigating a PostgreSQL database. "
     "The schema is already loaded and provided in context. "
+    "When a semantic glossary is present, use it for ambiguous business terms "
+    "(revenue, AOV, time windows, etc.) instead of inventing definitions. "
     "Each turn, choose exactly one tool: run_sql, ready_to_answer, or needs_clarification. "
     "Clarification policy (BR-7): ask only when the metric/entity itself is undefined "
     "(e.g. vague 'sales performance') or a revenue/total question has no time scope AND "
@@ -141,12 +144,15 @@ def _plan_messages(state: InvestigationState, cap: int) -> list[dict[str, Any]]:
         if state.schema is not None
         else "(schema unavailable)"
     )
+    glossary_part = format_glossary_context()
+    glossary_block = f"{glossary_part}\n\n" if glossary_part else ""
     return [
         {
             "role": "user",
             "content": (
                 f"Question: {state.question}\n\n"
                 f"Schema snapshot:\n{schema_part}\n\n"
+                f"{glossary_block}"
                 f"Evidence so far ({len(state.evidence)} steps):\n{_evidence_blob(state)}\n\n"
                 f"Iterations used: {state.iterations}/{cap}\n"
                 "Plan the next single step via a tool call."
