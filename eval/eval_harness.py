@@ -2,6 +2,14 @@
 
 Usage (repo root, DB up, .env configured):
   NEBIUS_TIMEOUT_SECONDS=180 .venv/bin/python eval/eval_harness.py
+  .venv/bin/python eval/eval_harness.py --benchmark eval/benchmark_v2.json
+
+Cross-provider comparison (manual / offline only — NEVER invoke from CI):
+  .venv/bin/python eval/eval_harness.py --compare-providers
+
+``--compare-providers`` makes real API calls to every configured provider against the
+full v2 suite (~30 questions each) and incurs real (small) LLM cost. CI must only
+run the 5-question smoke subset via ``eval/run_smoke.py`` (v2-4).
 """
 
 from __future__ import annotations
@@ -9,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,7 +30,13 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(ROOT / ".env")
 
-from llm_client import LLMProvider, LLMResponse, get_llm_provider  # noqa: E402
+from llm_client import (  # noqa: E402
+    DEFAULT_MODELS,
+    PROVIDER_API_KEY_ENV,
+    LLMProvider,
+    LLMResponse,
+    get_llm_provider,
+)
 from orchestrator.loop import investigate  # noqa: E402
 from tools.schema_introspector import clear_schema_cache  # noqa: E402
 
@@ -36,6 +51,10 @@ BENCHMARK_V2_PATH = ROOT / "eval" / "benchmark_v2.json"
 RESULTS_DIR = ROOT / "eval" / "results"
 REPORT_PATH = RESULTS_DIR / "report.md"
 RAW_PATH = RESULTS_DIR / "latest_run.json"
+COMPARISON_PATH = RESULTS_DIR / "comparison_v2.md"
+
+# Providers compared by --compare-providers (order preserved in the report).
+COMPARE_PROVIDERS = ("nebius", "openai", "anthropic", "google")
 
 _GRADER_SYSTEM = (
     "You are a strict evaluation grader for a data-analyst agent. "
@@ -337,6 +356,186 @@ def run_benchmark(
     return rows, passed, len(rows)
 
 
+def provider_api_key_configured(provider: str) -> bool:
+    """Return True when the provider's env API key is non-empty."""
+    key_env = PROVIDER_API_KEY_ENV.get(provider)
+    if not key_env:
+        return False
+    return bool(os.getenv(key_env, "").strip())
+
+
+def _pass_map(rows: list[dict[str, Any]]) -> dict[str, bool]:
+    return {str(r["id"]): bool(r.get("passed")) for r in rows}
+
+
+def write_comparison_report(
+    results_by_provider: dict[str, list[dict[str, Any]]],
+    *,
+    questions: list[dict[str, Any]],
+    skipped: list[tuple[str, str]],
+    path: Path = COMPARISON_PATH,
+) -> None:
+    """Write provider×score table plus notable pass/fail disagreements."""
+    question_meta = {str(q["id"]): q for q in questions}
+    lines: list[str] = []
+    lines.append("# Cross-model evaluation comparison (v2)")
+    lines.append("")
+    lines.append(
+        f"_Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}_"
+    )
+    lines.append("")
+    lines.append(
+        "Manual / offline only — incurs real LLM API cost. "
+        "Not run in CI (smoke subset only)."
+    )
+    lines.append("")
+    lines.append("## Provider scores")
+    lines.append("")
+    lines.append("| Provider | Score | Model |")
+    lines.append("| --- | --- | --- |")
+
+    for provider, rows in results_by_provider.items():
+        total = len(rows)
+        passed = sum(1 for r in rows if r.get("passed"))
+        model = DEFAULT_MODELS.get(provider, "(default)")
+        lines.append(f"| {provider} | **{passed}/{total}** | `{model}` |")
+
+    for provider, reason in skipped:
+        lines.append(f"| {provider} | _skipped_ | {reason} |")
+
+    lines.append("")
+    lines.append("## Notable differences")
+    lines.append("")
+
+    providers = list(results_by_provider.keys())
+    if len(providers) < 2:
+        lines.append(
+            "Fewer than two providers produced scores, so pass/fail disagreements "
+            "cannot be compared."
+        )
+    else:
+        pass_maps = {p: _pass_map(rows) for p, rows in results_by_provider.items()}
+        all_ids = sorted(
+            {qid for pm in pass_maps.values() for qid in pm},
+            key=lambda qid: (
+                int(qid.split("-")[-1]) if qid.split("-")[-1].isdigit() else 999,
+                qid,
+            ),
+        )
+        disagreements: list[str] = []
+        glossary_trap_notes: list[str] = []
+        for qid in all_ids:
+            outcomes = {
+                p: pass_maps[p].get(qid) for p in providers if qid in pass_maps[p]
+            }
+            if len(set(outcomes.values())) <= 1:
+                continue
+            meta = question_meta.get(qid) or {}
+            verdict = ", ".join(
+                f"{p}={'PASS' if ok else 'FAIL'}" for p, ok in outcomes.items()
+            )
+            flags: list[str] = []
+            if meta.get("tests_glossary"):
+                flags.append("glossary-default / disclosure")
+            if meta.get("is_trap"):
+                flags.append("trap")
+            flag_note = f" ({'; '.join(flags)})" if flags else ""
+            bullet = f"- **{qid}**{flag_note}: {meta.get('question', '')} — {verdict}"
+            disagreements.append(bullet)
+            if flags:
+                glossary_trap_notes.append(bullet)
+
+        if not disagreements:
+            lines.append(
+                "No pass/fail disagreements across providers that completed the suite."
+            )
+        else:
+            lines.append(
+                "Questions where providers disagreed on pass/fail "
+                "(glossary-default disclosure and trap items called out first when present):"
+            )
+            lines.append("")
+            # Prefer glossary/trap disagreements at the top of the section.
+            for bullet in glossary_trap_notes:
+                lines.append(bullet)
+            for bullet in disagreements:
+                if bullet not in glossary_trap_notes:
+                    lines.append(bullet)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")
+    logger.info("Wrote %s", path)
+
+
+def run_compare_providers(
+    questions: list[dict[str, Any]],
+    *,
+    providers: tuple[str, ...] = COMPARE_PROVIDERS,
+    comparison_path: Path = COMPARISON_PATH,
+) -> int:
+    """Run the full suite once per provider and write ``comparison_v2.md``.
+
+    WARNING: Makes real multi-provider API calls and costs real (small) money.
+    Intended for manual / nightly use only — never invoke from CI. The PR smoke
+    gate (v2-4) runs ``eval/run_smoke.py`` on a 5-question subset instead.
+    """
+    results_by_provider: dict[str, list[dict[str, Any]]] = {}
+    skipped: list[tuple[str, str]] = []
+
+    for provider in providers:
+        key_env = PROVIDER_API_KEY_ENV.get(provider, f"{provider.upper()}_API_KEY")
+        if not provider_api_key_configured(provider):
+            msg = f"`{key_env}` not set"
+            logger.warning("Skipping provider %s — %s", provider, msg)
+            print(f"WARN: skipping {provider} ({msg})", file=sys.stderr)
+            skipped.append((provider, msg))
+            continue
+
+        # Use each provider's default model so a global LLM_MODEL (e.g. Nebius id)
+        # does not get applied to OpenAI/Anthropic/Google.
+        model = DEFAULT_MODELS.get(provider)
+        logger.info(
+            "=== compare-providers: starting %s (model=%s) ===", provider, model
+        )
+        try:
+            client = get_llm_provider(provider, model=model)
+        except Exception as exc:  # noqa: BLE001
+            msg = f"failed to init: {exc}"
+            logger.warning("Skipping provider %s — %s", provider, msg)
+            print(f"WARN: skipping {provider} ({msg})", file=sys.stderr)
+            skipped.append((provider, msg))
+            continue
+
+        report_path = RESULTS_DIR / f"report_{provider}_v2.md"
+        raw_path = RESULTS_DIR / f"latest_run_{provider}_v2.json"
+        try:
+            rows, passed, total = run_benchmark(
+                questions,
+                client=client,
+                report_path=report_path,
+                raw_path=raw_path,
+            )
+        except Exception as exc:  # noqa: BLE001
+            msg = f"run failed: {exc}"
+            logger.exception("Provider %s aborted", provider)
+            print(f"WARN: skipping remainder for {provider} ({msg})", file=sys.stderr)
+            skipped.append((provider, msg))
+            continue
+
+        results_by_provider[provider] = rows
+        print(f"{provider}: {passed}/{total}")
+
+    write_comparison_report(
+        results_by_provider,
+        questions=questions,
+        skipped=skipped,
+        path=comparison_path,
+    )
+    print(f"Comparison report: {comparison_path}")
+    # Partial provider coverage is OK — do not fail the whole run for missing keys.
+    return 0 if results_by_provider else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run benchmark eval harness")
     parser.add_argument(
@@ -357,7 +556,29 @@ def main(argv: list[str] | None = None) -> int:
         default="",
         help="Comma-separated question ids to run (optional)",
     )
+    parser.add_argument(
+        "--compare-providers",
+        action="store_true",
+        help=(
+            "Run benchmark_v2 once per configured provider and write "
+            "eval/results/comparison_v2.md. Real multi-provider API cost — "
+            "manual/nightly only; never used by CI (see eval/run_smoke.py)."
+        ),
+    )
     args = parser.parse_args(argv)
+
+    if args.compare_providers:
+        # Always use the v2 suite for cross-model comparison unless overridden.
+        bench_path = (
+            args.benchmark if args.benchmark != BENCHMARK_PATH else BENCHMARK_V2_PATH
+        )
+        questions = load_benchmark(bench_path)
+        if args.ids.strip():
+            wanted = {x.strip() for x in args.ids.split(",") if x.strip()}
+            questions = [q for q in questions if q["id"] in wanted]
+        if args.limit and args.limit > 0:
+            questions = questions[: args.limit]
+        return run_compare_providers(questions)
 
     questions = load_benchmark(args.benchmark)
     if args.ids.strip():

@@ -53,6 +53,8 @@ jobs:
   # Requires repository secret NEBIUS_API_KEY (default provider). If LLM_PROVIDER is
   # changed, set the matching provider key secret instead. Unlike the unit-test job
   # above, this job is not mockable — it exercises real plan/execute/verify turns.
+  # Do NOT run eval/eval_harness.py --compare-providers here (multi-provider cost;
+  # manual/nightly only — v2-7).
   eval-smoke:
     runs-on: ubuntu-latest
 
