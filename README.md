@@ -23,7 +23,13 @@ docker compose up -d db   # demo DB only — skip if using your own Postgres
 python -m src.cli ask "Which region had the most orders in January 2025?"
 ```
 
-Add `--verbose` to print underlying SQL and the tool trace.
+Add `--verbose` to print underlying SQL and the tool trace. Each `ask` also writes a structured trace under `logs/run_*.jsonl` (row values redacted by default; `--no-redact` for local debugging only).
+
+Replay a prior run without calling the LLM:
+
+```bash
+python -m src.cli replay logs/run_20260918T000001Z.jsonl
+```
 
 ## Connecting to Your Own Database
 

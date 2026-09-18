@@ -29,7 +29,7 @@
 | v2-3 | Expanded, versioned benchmark suite (~30 questions) | BR-13 | — | L | Done |
 | v2-4 | CI smoke-subset regression gate | BR-13 | — | M | Done |
 | v2-5 | Structured tracing + redaction | BR-15, BR-17 | — | L | Done |
-| v2-6 | Local run replay command | BR-16 | — | M | Planned |
+| v2-6 | Local run replay command | BR-16 | — | M | Done |
 | v2-7 | Cross-model evaluation comparison | BR-14 | — | M | Planned |
 | v2-8 | Chart recommendation + CSV/XLSX export | BR-19 | — | M | Planned |
 | v2-9 | MCP server (`ask_data_question` tool) | BR-18 | — | L | Planned |
