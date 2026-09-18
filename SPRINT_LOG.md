@@ -29,3 +29,13 @@ v1.0.0 documentation/architecture closeout (README + HLD/LLD embeds).
 - **CR-1c:** TTY-only Rich CLI banner (provider/model + DB host/name, no credentials).
 
 **Release:** Tag `v1.1.0` — minor version: new providers/docs/UX without breaking the v1.0.0 CLI contract.
+
+## v2.0 Sprint 1
+
+**Completed:** v2-1 (glossary loader / BR-11), v2-2 (assumption disclosure / BR-12), v2-3 (versioned benchmark / BR-13), v2-4 (CI smoke gate / BR-13). ADRs: **ADR-007 (v2.0)** glossary; **ADR-008 (v2.0)** smoke regression.
+
+**BQ-11 gap:** Closed — glossary defaults are recorded on `defaults_used` and surfaced as `Assumption:` lines; regression in `tests/test_orchestrator_assumptions.py` asserts disclosure on the Electronics-revenue trap (not a silent all-time total).
+
+**Benchmark:** `eval/benchmark_v2.json` — **30** questions (12 v1 + 18 new); `eval/benchmark_questions.json` kept as the v1.0 baseline.
+
+**CI smoke:** Live on PRs via `eval-smoke` (`eval/run_smoke.py` vs `smoke_baseline.json` 5/5). Requires repository secret `NEBIUS_API_KEY` (or the matching default-provider key). Full 30-question suite remains manual/nightly.
