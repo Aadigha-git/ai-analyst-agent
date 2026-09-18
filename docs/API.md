@@ -8,7 +8,9 @@ Internal tool contracts the Agent Orchestrator calls (Phase 3 Document 5). The s
 | `run_sql(query: str)` | `query` — a single SELECT statement | `rows` (list of dicts, capped), `row_count`, `execution_time_seconds`, `truncated` (bool), `columns` | Rejects any non-SELECT **before** contacting Postgres (`SqlValidationError`); connection uses `SET TRANSACTION READ ONLY`; enforces `ROW_LIMIT` (default 500; injects `LIMIT` or truncates with `truncated=True`) and `QUERY_TIMEOUT_SECONDS` via `statement_timeout` (default 10s) |
 | `run_stats(operation: str, params: object, data_ref: str)` | `operation` — one of `aggregate`, `rolling_mean`, `outlier_zscore`, `correlation`, `segment`; `params` — operation-specific args; `data_ref` — key/index into prior in-memory results (`data_store` or orchestrator `evidence`) | `{operation, params, data_ref, result}` where `result` is records or a summary object | Allow-list only via fixed `OPERATIONS` dict (ADR-004); `StatsOperationNotAllowed` for anything else; **never** `exec`/`eval`; no DB connection — optional kw-only `evidence` / `data_store` for resolution |
 | `verify(claim: str, evidence_ref: str)` | `claim` — draft conclusion; `evidence_ref` — supporting evidence (JSON/text; used to recover original SQL) | `{consistent: bool, detail: str, new_query_used: str}` | Exactly one new query; **raises** `DuplicateVerificationQuery` if proposed SQL normalizes equal to an original; optional kw-only `prior_queries`, `client`, `sql_runner` for orchestrator/tests |
-| `format_output(answer: str, evidence: list, *, defaults_used?)` | `answer` — verified conclusion; `evidence` — supporting data points / tool results; optional `defaults_used` — glossary fallback phrases from planning | `{narrative, table, defaults_used}` ; with `verbose=True` also `{sql_queries, trace}` | LLM phrases a short plain-language narrative (no SQL); when `defaults_used` is non-empty, appends `Assumption: …` line(s) (BR-12); compact supporting table for Rich CLI rendering; default omits raw SQL/tool trace |
+| `format_output(answer: str, evidence: list, *, defaults_used?)` | `answer` — verified conclusion; `evidence` — supporting data points / tool results; optional `defaults_used` — glossary fallback phrases from planning | `{narrative, table, defaults_used, chart_recommendation}` ; with `verbose=True` also `{sql_queries, trace}` | LLM phrases a short plain-language narrative (no SQL); when `defaults_used` is non-empty, appends `Assumption: …` line(s) (BR-12); attaches rule-based `chart_recommendation` (BR-19); compact supporting table for Rich CLI rendering; default omits raw SQL/tool trace |
+| `recommend_chart(dataframe)` | pandas `DataFrame` of supporting rows | `{chart_type, suggestion}` where `chart_type` is `line` \| `bar` \| `scatter` \| `table only` | Rule-based (no rendering): date/time → line; one categorical + one numeric → bar; two numeric → scatter; else table only. Suggestion text like `Suggested visualization: bar chart (region vs. total revenue)` |
+| `export_dataframe(df, fmt)` | `fmt` — `csv` \| `xlsx` | `Path` to `outputs/export_<UTC-timestamp>.{csv,xlsx}` | Uses pandas `to_csv` / `to_excel` (openpyxl for xlsx) |
 
 ## CLI (`python -m src.cli ask`)
 
@@ -16,6 +18,7 @@ Internal tool contracts the Agent Orchestrator calls (Phase 3 Document 5). The s
 | --- | --- | --- |
 | `--verbose` / `-v` | off | Show underlying SQL and tool trace after the narrative + table |
 | `--no-redact` | off | Disable row-value redaction in `logs/run_*.jsonl` (local debugging only; never use in CI smoke) |
+| `--export {csv,xlsx}` | off | Write the supporting evidence DataFrame to `outputs/export_<timestamp>.{csv,xlsx}` |
 
 ## Run logger (`src/run_logger.py`)
 

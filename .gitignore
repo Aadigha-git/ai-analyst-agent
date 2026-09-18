@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .env
 logs/
+outputs/
 eval/results/*
 !eval/results/smoke_baseline.json
 !eval/results/report.md

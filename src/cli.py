@@ -27,7 +27,12 @@ from llm_client import (  # noqa: E402
     get_llm_provider,
 )
 from orchestrator.loop import investigate  # noqa: E402
-from output_formatter import format_output, render_formatted  # noqa: E402
+from output_formatter import (  # noqa: E402
+    evidence_to_dataframe,
+    export_dataframe,
+    format_output,
+    render_formatted,
+)
 from run_logger import RunLogger  # noqa: E402
 from tools.schema_introspector import introspect_schema  # noqa: E402
 from tools.sql_executor import run_sql  # noqa: E402
@@ -304,6 +309,8 @@ def present_investigation(
     verbose: bool = False,
     client: LLMProvider | None = None,
     console_: Console | None = None,
+    export_format: str | None = None,
+    export_dir: Path | None = None,
 ) -> str:
     """Format and print an investigate() result; return captured display text."""
     out = console_ or Console(record=True)
@@ -352,7 +359,18 @@ def present_investigation(
         if detail:
             out.print(f"[dim]{detail}[/dim]")
 
-    return render_formatted(formatted, console=out, verbose=verbose)
+    text = render_formatted(formatted, console=out, verbose=verbose)
+
+    if export_format:
+        df = evidence_to_dataframe(evidence)
+        path = export_dataframe(
+            df, export_format, output_dir=export_dir  # type: ignore[arg-type]
+        )
+        out.print(f"[dim]Exported evidence to {path}[/dim]")
+        if hasattr(out, "export_text"):
+            text = out.export_text()
+
+    return text
 
 
 @app.command("ask")
@@ -372,8 +390,17 @@ def ask(
             "never use in CI smoke)."
         ),
     ),
+    export: str | None = typer.Option(
+        None,
+        "--export",
+        help="Write supporting evidence to outputs/export_<timestamp>.{csv|xlsx}.",
+        case_sensitive=False,
+    ),
 ) -> None:
     """Investigate a question and print a narrative answer with a supporting table."""
+    if export is not None and export.strip().lower() not in {"csv", "xlsx"}:
+        raise typer.BadParameter("--export must be 'csv' or 'xlsx'")
+
     llm = get_llm_provider()
     print_cli_banner(llm)
     # Redaction is ON by default (BR-17). --no-redact is local-debug only.
@@ -384,7 +411,12 @@ def ask(
     )
     try:
         result = investigate(question, client=llm, run_logger=session)
-        present_investigation(result, verbose=verbose, client=llm)
+        present_investigation(
+            result,
+            verbose=verbose,
+            client=llm,
+            export_format=export.strip().lower() if export else None,
+        )
     finally:
         session.close()
 

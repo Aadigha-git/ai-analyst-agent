@@ -8,3 +8,4 @@ openai
 anthropic
 google-genai
 PyYAML
+openpyxl
