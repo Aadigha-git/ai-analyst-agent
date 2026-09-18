@@ -39,3 +39,13 @@ v1.0.0 documentation/architecture closeout (README + HLD/LLD embeds).
 **Benchmark:** `eval/benchmark_v2.json` — **30** questions (12 v1 + 18 new); `eval/benchmark_questions.json` kept as the v1.0 baseline.
 
 **CI smoke:** Live on PRs via `eval-smoke` (`eval/run_smoke.py` vs `smoke_baseline.json` 5/5). Requires repository secret `NEBIUS_API_KEY` (or the matching default-provider key). Full 30-question suite remains manual/nightly.
+
+## v2.0 Sprint 2
+
+**Completed:** v2-5 (structured redacted JSONL tracing / BR-15, BR-17), v2-6 (`cli replay` / BR-16), v2-7 (`--compare-providers` / BR-14), v2-8 (chart recommendation + CSV/XLSX export / BR-19).
+
+**Tracing / replay:** Each `ask` writes `logs/run_<timestamp>.jsonl` (row values redacted by default; `--no-redact` local-only). `python -m src.cli replay <trace.jsonl>` pretty-prints steps plus session latency/token/cost totals.
+
+**Cross-model comparison:** Harness writes `eval/results/comparison_v2.md` (provider×score + pass/fail disagreements, glossary/trap called out). **Live headline:** no full multi-provider run landed this sprint (provider keys incomplete / Nebius 403 locally) — highest scorer and disagreements TBD on the first successful `python eval/eval_harness.py --compare-providers` nightly. CI still runs only the 5-question smoke subset.
+
+**Export / visualization:** Rule-based `recommend_chart` prints `Suggested visualization: …` (line/bar/scatter/table only); `--export {csv,xlsx}` writes `outputs/export_<timestamp>.*`.
