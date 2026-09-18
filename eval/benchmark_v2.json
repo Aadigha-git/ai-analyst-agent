@@ -1,0 +1,396 @@
+{
+  "version": "2.0",
+  "created": "2026-09-18",
+  "questions": [
+    {
+      "id": "BQ-01",
+      "question": "How many orders are in the database?",
+      "expected_answer": "200",
+      "rubric": [
+        "States order count of 200",
+        "Uses orders table (COUNT), not order_items",
+        "Does not invent filters"
+      ],
+      "requires_multi_step": false,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-02",
+      "question": "How many customers are there?",
+      "expected_answer": "80",
+      "rubric": [
+        "States customer count of 80",
+        "Counts customers rows, not distinct customers on orders"
+      ],
+      "requires_multi_step": false,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-03",
+      "question": "How many products are in the catalog?",
+      "expected_answer": "40",
+      "rubric": [
+        "States product count of 40",
+        "Uses products table"
+      ],
+      "requires_multi_step": false,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-04",
+      "question": "How many orders were placed through the web channel?",
+      "expected_answer": "74",
+      "rubric": [
+        "States 74 web orders",
+        "Filters orders.channel = 'web'",
+        "Does not confuse channel with customer region"
+      ],
+      "requires_multi_step": false,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-05",
+      "question": "How many order line items are there?",
+      "expected_answer": "500",
+      "rubric": [
+        "States 500 order_items rows",
+        "Uses order_items, not orders"
+      ],
+      "requires_multi_step": false,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-06",
+      "question": "What is the average line_total across all order items?",
+      "expected_answer": "627.18",
+      "rubric": [
+        "Reports ~627.18 (AVG of order_items.line_total)",
+        "Does not confuse this with average order value (AOV)"
+      ],
+      "requires_multi_step": false,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-07",
+      "question": "Which region had the largest month-over-month order growth (by order count)?",
+      "expected_answer": "Central region, +6 orders from Dec 2024 to Jan 2025 (largest MoM growth)",
+      "rubric": [
+        "Identifies Central as the top region",
+        "Joins orders to customers for region",
+        "Computes month-over-month difference in order counts (not revenue)",
+        "Reports growth of +6 for the winning month"
+      ],
+      "requires_multi_step": true,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-08",
+      "question": "What is the total revenue (sum of line_total) for Apparel products sold through the store channel?",
+      "expected_answer": "7719.44",
+      "rubric": [
+        "Reports 7719.44",
+        "Joins order_items → products (category) and order_items → orders (channel)",
+        "Filters Apparel and store",
+        "Sums line_total (not unit_price × quantity from products alone)"
+      ],
+      "requires_multi_step": true,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-09",
+      "question": "How many orders did Consumer-segment customers place via the web channel?",
+      "expected_answer": "20",
+      "rubric": [
+        "Reports 20",
+        "Joins orders to customers",
+        "Applies both segment='Consumer' and channel='web'"
+      ],
+      "requires_multi_step": true,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-10",
+      "question": "Which customer segment has the highest average order value (mean of per-order sum of line_total)?",
+      "expected_answer": "Consumer, with AOV 1736.36",
+      "rubric": [
+        "Identifies Consumer as highest",
+        "Computes per-order totals then averages by segment (not AVG(line_total))",
+        "Reports AOV approximately 1736.36",
+        "Ranks above Enterprise (~1484.56) and SMB (~1480.49)"
+      ],
+      "requires_multi_step": true,
+      "is_trap": false,
+      "tests_glossary": true
+    },
+    {
+      "id": "BQ-11",
+      "question": "What is total Electronics revenue?",
+      "expected_answer": "157640.18 all-time, with an explicit assumption that no time range was specified (default_time_window / all available dates). Must not silently pick a year; 2024 alone is 63428.38.",
+      "rubric": [
+        "Reports ~157640.18 as the all-time Electronics sum(line_total)",
+        "Explicitly discloses the all-available-dates / no-time-range assumption (BR-12)",
+        "Joins order_items to products with category='Electronics'",
+        "Does not sum products.unit_price alone or invent a year without saying so"
+      ],
+      "requires_multi_step": true,
+      "is_trap": true,
+      "tests_glossary": true
+    },
+    {
+      "id": "BQ-12",
+      "question": "How are sales performing recently?",
+      "expected_answer": "Needs clarification: metric (order count vs revenue), definition of 'recently' (time window), and any segment/channel filter.",
+      "rubric": [
+        "Does not invent a metric or time window",
+        "Asks a clarifying question (needs_clarification) rather than guessing",
+        "Mentions at least one of: metric, time range, segment/channel"
+      ],
+      "requires_multi_step": false,
+      "is_trap": true,
+      "tests_glossary": true
+    },
+    {
+      "id": "BQ-13",
+      "question": "How many orders were placed in 2024?",
+      "expected_answer": "73",
+      "rubric": [
+        "Reports 73",
+        "Filters orders.order_date to calendar year 2024",
+        "Counts orders rows, not order_items"
+      ],
+      "requires_multi_step": false,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-14",
+      "question": "What is total revenue across all order items?",
+      "expected_answer": "313591.69",
+      "rubric": [
+        "Reports ~313591.69",
+        "Defines revenue as SUM(order_items.line_total) (glossary)",
+        "Does not sum products.unit_price"
+      ],
+      "requires_multi_step": false,
+      "is_trap": false,
+      "tests_glossary": true
+    },
+    {
+      "id": "BQ-15",
+      "question": "What is total Electronics revenue in 2024?",
+      "expected_answer": "63428.38",
+      "rubric": [
+        "Reports ~63428.38",
+        "Joins order_items → products (Electronics) and orders (2024 date filter)",
+        "Sums line_total only for 2024 orders"
+      ],
+      "requires_multi_step": true,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-16",
+      "question": "How many active customers are there as of 2025-06-21?",
+      "expected_answer": "48",
+      "rubric": [
+        "Reports 48",
+        "Uses glossary active_customer: at least one order in the trailing 90 days ending 2025-06-21 (orders on/after 2025-03-23)",
+        "Counts distinct customers, not orders"
+      ],
+      "requires_multi_step": true,
+      "is_trap": false,
+      "tests_glossary": true
+    },
+    {
+      "id": "BQ-17",
+      "question": "What is the overall average order value?",
+      "expected_answer": "1567.96",
+      "rubric": [
+        "Reports ~1567.96",
+        "Computes mean of per-order SUM(line_total), not AVG(line_total) (glossary AOV)",
+        "Does not filter by segment or channel unless asked"
+      ],
+      "requires_multi_step": true,
+      "is_trap": false,
+      "tests_glossary": true
+    },
+    {
+      "id": "BQ-18",
+      "question": "Which product category has the highest total revenue?",
+      "expected_answer": "Electronics, with revenue 157640.18",
+      "rubric": [
+        "Identifies Electronics as highest",
+        "Reports revenue approximately 157640.18",
+        "Ranks above Sports (~56356.68) and Home (~48488.78)"
+      ],
+      "requires_multi_step": true,
+      "is_trap": false,
+      "tests_glossary": true
+    },
+    {
+      "id": "BQ-19",
+      "question": "How many orders were placed through the mobile channel?",
+      "expected_answer": "64",
+      "rubric": [
+        "Reports 64",
+        "Filters orders.channel = 'mobile'"
+      ],
+      "requires_multi_step": false,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-20",
+      "question": "How many orders came from West-region customers?",
+      "expected_answer": "34",
+      "rubric": [
+        "Reports 34",
+        "Joins orders to customers",
+        "Filters customers.region = 'West'"
+      ],
+      "requires_multi_step": true,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-21",
+      "question": "How many Home products are in the catalog?",
+      "expected_answer": "8",
+      "rubric": [
+        "Reports 8",
+        "Filters products.category = 'Home'",
+        "Uses products table, not order_items"
+      ],
+      "requires_multi_step": false,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-22",
+      "question": "What is the average quantity per order line item?",
+      "expected_answer": "3.48",
+      "rubric": [
+        "Reports ~3.48",
+        "Uses AVG(order_items.quantity)",
+        "Does not confuse with average order value"
+      ],
+      "requires_multi_step": false,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-23",
+      "question": "Which sales channel has the most orders?",
+      "expected_answer": "web, with 74 orders",
+      "rubric": [
+        "Identifies web as the top channel",
+        "Reports 74 orders",
+        "Ranks above mobile (64), store (36), and partner (26)"
+      ],
+      "requires_multi_step": false,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-24",
+      "question": "What is total Sports revenue in 2025?",
+      "expected_answer": "40466.33",
+      "rubric": [
+        "Reports ~40466.33",
+        "Joins order_items → products (Sports) and orders (2025 date filter)",
+        "Sums line_total"
+      ],
+      "requires_multi_step": true,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-25",
+      "question": "How many Enterprise-segment customers are there?",
+      "expected_answer": "34",
+      "rubric": [
+        "Reports 34",
+        "Filters customers.segment = 'Enterprise'",
+        "Counts customers rows, not their orders"
+      ],
+      "requires_multi_step": false,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-26",
+      "question": "How many orders have more than one line item?",
+      "expected_answer": "152",
+      "rubric": [
+        "Reports 152",
+        "Groups order_items by order_id and filters HAVING COUNT(*) > 1",
+        "Does not count order_items rows with quantity > 1 as a substitute"
+      ],
+      "requires_multi_step": true,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-27",
+      "question": "Which customer_id placed the most orders?",
+      "expected_answer": "customer_id 52, with 8 orders",
+      "rubric": [
+        "Identifies customer_id 52",
+        "Reports 8 orders for that customer",
+        "Uses COUNT on orders grouped by customer_id"
+      ],
+      "requires_multi_step": true,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-28",
+      "question": "How many orders did North-region Enterprise customers place?",
+      "expected_answer": "26",
+      "rubric": [
+        "Reports 26",
+        "Joins orders to customers",
+        "Applies both region='North' and segment='Enterprise'"
+      ],
+      "requires_multi_step": true,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-29",
+      "question": "What is the total revenue for Home products sold through the web channel?",
+      "expected_answer": "19368.00",
+      "rubric": [
+        "Reports ~19368.00",
+        "Joins order_items → products (Home) and orders (web)",
+        "Sums line_total"
+      ],
+      "requires_multi_step": true,
+      "is_trap": false,
+      "tests_glossary": false
+    },
+    {
+      "id": "BQ-30",
+      "question": "Which sales channel has the highest average order value?",
+      "expected_answer": "store, with AOV 1838.52",
+      "rubric": [
+        "Identifies store as highest",
+        "Reports AOV approximately 1838.52",
+        "Computes mean of per-order SUM(line_total) by channel (glossary AOV), not AVG(line_total)",
+        "Ranks above mobile (~1641.17), web (~1530.25), and partner (~1120.44)"
+      ],
+      "requires_multi_step": true,
+      "is_trap": false,
+      "tests_glossary": true
+    }
+  ]
+}
