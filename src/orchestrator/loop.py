@@ -23,12 +23,14 @@ _SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
+from glossary_loader import detect_defaults_used, format_glossary_context  # noqa: E402
 from llm_client import (  # noqa: E402
     RUN_SQL_TOOL_SCHEMA,
     LLMProvider,
     LLMResponse,
     get_llm_provider,
 )
+from run_logger import RunLogger  # noqa: E402
 from tools.schema_introspector import (  # noqa: E402
     clear_schema_cache,
     introspect_schema,
@@ -96,6 +98,8 @@ LOOP_TOOLS = [RUN_SQL_TOOL_SCHEMA, READY_TOOL_SCHEMA, CLARIFY_TOOL_SCHEMA]
 SYSTEM_PROMPT = (
     "You are a data-analyst agent investigating a PostgreSQL database. "
     "The schema is already loaded and provided in context. "
+    "When a semantic glossary is present, use it for ambiguous business terms "
+    "(revenue, AOV, time windows, etc.) instead of inventing definitions. "
     "Each turn, choose exactly one tool: run_sql, ready_to_answer, or needs_clarification. "
     "Clarification policy (BR-7): ask only when the metric/entity itself is undefined "
     "(e.g. vague 'sales performance') or a revenue/total question has no time scope AND "
@@ -121,6 +125,14 @@ class InvestigationState:
     draft_answer: str | None = None
     clarifying_question: str | None = None
     clarification_reason: str | None = None
+    defaults_used: list[str] = field(default_factory=list)
+
+
+def _record_glossary_defaults(state: InvestigationState) -> None:
+    """Record glossary defaults consulted for this question (BR-12)."""
+    for item in detect_defaults_used(state.question):
+        if item not in state.defaults_used:
+            state.defaults_used.append(item)
 
 
 def _max_iterations() -> int:
@@ -141,12 +153,16 @@ def _plan_messages(state: InvestigationState, cap: int) -> list[dict[str, Any]]:
         if state.schema is not None
         else "(schema unavailable)"
     )
+    _record_glossary_defaults(state)
+    glossary_part = format_glossary_context()
+    glossary_block = f"{glossary_part}\n\n" if glossary_part else ""
     return [
         {
             "role": "user",
             "content": (
                 f"Question: {state.question}\n\n"
                 f"Schema snapshot:\n{schema_part}\n\n"
+                f"{glossary_block}"
                 f"Evidence so far ({len(state.evidence)} steps):\n{_evidence_blob(state)}\n\n"
                 f"Iterations used: {state.iterations}/{cap}\n"
                 "Plan the next single step via a tool call."
@@ -216,11 +232,15 @@ def investigate(
     preload_schema: bool = True,
     run_verification: bool = True,
     schema_loader: Callable[[], dict[str, Any]] | None = None,
+    run_logger: RunLogger | None = None,
 ) -> dict[str, Any]:
     """Plan → execute → reflect loop bounded by MAX_ITERATIONS.
 
     Returns a result dict with ``status`` one of:
     ``ok``, ``uncertain``, ``needs_clarification``, ``verification_failed``.
+
+    When ``run_logger`` is provided, each plan / tool_call / observe / verify step
+    is appended to that session's JSONL trace (redaction controlled by the logger).
     """
     if reset_schema_cache:
         clear_schema_cache()
@@ -230,6 +250,7 @@ def investigate(
     state = InvestigationState(question=question)
     trace: list[dict[str, Any]] = []
     load_schema = schema_loader or introspect_schema
+    session = run_logger
 
     if preload_schema:
         try:
@@ -259,6 +280,7 @@ def investigate(
 
     while state.iterations < cap:
         state.iterations += 1
+        plan_started = time.perf_counter()
         try:
             result = _complete_with_retries(
                 llm,
@@ -267,6 +289,7 @@ def investigate(
                 tools=LOOP_TOOLS,
             )
         except Exception as exc:  # noqa: BLE001
+            plan_ms = (time.perf_counter() - plan_started) * 1000
             step = {
                 "iteration": state.iterations,
                 "action": "llm_error",
@@ -274,8 +297,28 @@ def investigate(
             }
             state.evidence.append(step["observation"])
             trace.append(step)
+            if session is not None:
+                session.record(
+                    "plan",
+                    latency_ms=plan_ms,
+                    tokens_used=0,
+                    payload={"error": str(exc), "iteration": state.iterations},
+                )
             last_action = "llm_error"
             continue
+
+        plan_ms = (time.perf_counter() - plan_started) * 1000
+        if session is not None:
+            session.record(
+                "plan",
+                latency_ms=plan_ms,
+                tokens_used=result.tokens_used,
+                payload={
+                    "iteration": state.iterations,
+                    "llm_kind": result.type,
+                    "tool_name": result.tool_name,
+                },
+            )
 
         step: dict[str, Any] = {
             "iteration": state.iterations,
@@ -298,6 +341,14 @@ def investigate(
         step["arguments"] = arguments
         last_action = tool_name
 
+        if session is not None:
+            session.record(
+                "tool_call",
+                latency_ms=0,
+                tokens_used=result.tokens_used,
+                payload={"tool": tool_name, "arguments": arguments},
+            )
+
         if tool_name == "needs_clarification":
             state.clarifying_question = str(
                 arguments.get("clarifying_question") or ""
@@ -310,6 +361,13 @@ def investigate(
                 "reason": state.clarification_reason,
             }
             trace.append(step)
+            if session is not None:
+                session.record(
+                    "observe",
+                    latency_ms=0,
+                    tokens_used=0,
+                    payload={"tool": tool_name, "observation": step["observation"]},
+                )
             return {
                 "status": "needs_clarification",
                 "question": question,
@@ -319,22 +377,50 @@ def investigate(
                 "iterations": state.iterations,
                 "trace": trace,
                 "state": state,
+                "run_log_path": str(session.path) if session is not None else None,
             }
 
         if tool_name == "ready_to_answer":
             state.draft_answer = str(arguments.get("answer") or "").strip() or None
-            step["observation"] = {"answer": state.draft_answer}
+            _record_glossary_defaults(state)
+            step["observation"] = {
+                "answer": state.draft_answer,
+                "defaults_used": list(state.defaults_used),
+            }
             trace.append(step)
+            if session is not None:
+                session.record(
+                    "observe",
+                    latency_ms=0,
+                    tokens_used=0,
+                    payload={"tool": tool_name, "observation": step["observation"]},
+                )
             break
 
         if tool_name == "run_sql":
+            obs_started = time.perf_counter()
             step["observation"] = _execute_run_sql(state, arguments)
+            obs_ms = (time.perf_counter() - obs_started) * 1000
             trace.append(step)
+            if session is not None:
+                session.record(
+                    "observe",
+                    latency_ms=obs_ms,
+                    tokens_used=0,
+                    payload={"tool": tool_name, "observation": step["observation"]},
+                )
             continue
 
         step["observation"] = {"error": f"unknown tool {tool_name}"}
         state.evidence.append(step["observation"])
         trace.append(step)
+        if session is not None:
+            session.record(
+                "observe",
+                latency_ms=0,
+                tokens_used=0,
+                payload={"tool": tool_name, "observation": step["observation"]},
+            )
 
     if not state.draft_answer or last_action != "ready_to_answer":
         return {
@@ -347,10 +433,13 @@ def investigate(
             "trace": trace,
             "verification": None,
             "state": state,
+            "run_log_path": str(session.path) if session is not None else None,
         }
 
     verification = None
     if run_verification:
+        verify_started = time.perf_counter()
+        verify_tokens = 0
         try:
             verification = verify(
                 state.draft_answer,
@@ -364,6 +453,14 @@ def investigate(
                 "detail": f"Verifier failed: {exc}",
                 "new_query_used": "",
             }
+        verify_ms = (time.perf_counter() - verify_started) * 1000
+        if session is not None:
+            session.record(
+                "verify",
+                latency_ms=verify_ms,
+                tokens_used=verify_tokens,
+                payload={"verification": verification},
+            )
 
         if not verification.get("consistent"):
             return {
@@ -374,7 +471,9 @@ def investigate(
                 "sql_steps": len(state.prior_queries),
                 "trace": trace,
                 "verification": verification,
+                "defaults_used": list(state.defaults_used),
                 "state": state,
+                "run_log_path": str(session.path) if session is not None else None,
             }
 
     return {
@@ -385,5 +484,7 @@ def investigate(
         "sql_steps": len(state.prior_queries),
         "trace": trace,
         "verification": verification,
+        "defaults_used": list(state.defaults_used),
         "state": state,
+        "run_log_path": str(session.path) if session is not None else None,
     }

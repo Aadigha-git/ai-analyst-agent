@@ -1,0 +1,21 @@
+# Semantic glossary for the sample retail schema (v2 ADR-007 / BR-11).
+# Loaded into the orchestrator planning context every plan turn.
+# Author additional entries when pointing the agent at a BYO database.
+
+active_customer:
+  definition: "a customer with at least one order in the trailing 90 days"
+  default_join: "customers JOIN orders ON customers.customer_id = orders.customer_id"
+
+revenue:
+  definition: "sum of order_items.line_total"
+  default_join: "order_items JOIN products ON order_items.product_id = products.product_id"
+
+average_order_value:
+  definition: "mean of per-order totals, where each order total is SUM(order_items.line_total) for that order_id — not AVG(order_items.line_total)"
+  default_join: "orders JOIN order_items ON orders.order_id = order_items.order_id JOIN customers ON orders.customer_id = customers.customer_id"
+
+default_time_window:
+  definition: "when a question doesn't specify a date range, default to all available data"
+
+sales:
+  definition: "ambiguous without a metric — prefer order count or revenue (sum of line_total); do not invent a metric"

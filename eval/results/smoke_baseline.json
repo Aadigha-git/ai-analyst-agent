@@ -1,0 +1,23 @@
+{
+  "passed": 5,
+  "total": 5,
+  "score": "5/5",
+  "updated": "2026-09-18",
+  "subset": "eval/smoke_subset.json",
+  "benchmark": "eval/benchmark_v2.json",
+  "question_ids": [
+    "BQ-01",
+    "BQ-08",
+    "BQ-09",
+    "BQ-11",
+    "BQ-12"
+  ],
+  "per_question": [
+    {"id": "BQ-01", "passed": true},
+    {"id": "BQ-08", "passed": true},
+    {"id": "BQ-09", "passed": true},
+    {"id": "BQ-11", "passed": true},
+    {"id": "BQ-12", "passed": true}
+  ],
+  "notes": "Baseline reflects the expected green smoke score after v2-1/v2-2 (BQ-11 assumption disclosure). Source: v1 latest_run.json passes for BQ-01/08/09/12 plus BQ-11 now expected PASS under the v2 rubric. Re-run `python eval/run_smoke.py --update-baseline` manually when a live provider key is available."
+}

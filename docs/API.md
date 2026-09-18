@@ -1,6 +1,6 @@
 # Tool / API Specifications
 
-Internal tool contracts the Agent Orchestrator calls (Phase 3 Document 5). The system exposes no public network API in v1.
+Internal tool contracts the Agent Orchestrator calls (Phase 3 Document 5). There is no public HTTP API; the product surfaces are the **CLI** (`python -m src.cli`) and the **MCP server** (`python -m src.mcp_server`, single tool `ask_data_question`).
 
 | Tool | Parameters | Returns | Guardrails |
 | --- | --- | --- | --- |
@@ -8,13 +8,52 @@ Internal tool contracts the Agent Orchestrator calls (Phase 3 Document 5). The s
 | `run_sql(query: str)` | `query` — a single SELECT statement | `rows` (list of dicts, capped), `row_count`, `execution_time_seconds`, `truncated` (bool), `columns` | Rejects any non-SELECT **before** contacting Postgres (`SqlValidationError`); connection uses `SET TRANSACTION READ ONLY`; enforces `ROW_LIMIT` (default 500; injects `LIMIT` or truncates with `truncated=True`) and `QUERY_TIMEOUT_SECONDS` via `statement_timeout` (default 10s) |
 | `run_stats(operation: str, params: object, data_ref: str)` | `operation` — one of `aggregate`, `rolling_mean`, `outlier_zscore`, `correlation`, `segment`; `params` — operation-specific args; `data_ref` — key/index into prior in-memory results (`data_store` or orchestrator `evidence`) | `{operation, params, data_ref, result}` where `result` is records or a summary object | Allow-list only via fixed `OPERATIONS` dict (ADR-004); `StatsOperationNotAllowed` for anything else; **never** `exec`/`eval`; no DB connection — optional kw-only `evidence` / `data_store` for resolution |
 | `verify(claim: str, evidence_ref: str)` | `claim` — draft conclusion; `evidence_ref` — supporting evidence (JSON/text; used to recover original SQL) | `{consistent: bool, detail: str, new_query_used: str}` | Exactly one new query; **raises** `DuplicateVerificationQuery` if proposed SQL normalizes equal to an original; optional kw-only `prior_queries`, `client`, `sql_runner` for orchestrator/tests |
-| `format_output(answer: str, evidence: list)` | `answer` — verified conclusion; `evidence` — supporting data points / tool results | `{narrative, table}` ; with `verbose=True` also `{sql_queries, trace}` | LLM phrases a short plain-language narrative (no SQL); compact supporting table for Rich CLI rendering; default omits raw SQL/tool trace; `--verbose` / `verbose=True` includes them |
+| `format_output(answer: str, evidence: list, *, defaults_used?)` | `answer` — verified conclusion; `evidence` — supporting data points / tool results; optional `defaults_used` — glossary fallback phrases from planning | `{narrative, table, defaults_used, chart_recommendation}` ; with `verbose=True` also `{sql_queries, trace}` | LLM phrases a short plain-language narrative (no SQL); when `defaults_used` is non-empty, appends `Assumption: …` line(s) (BR-12); attaches rule-based `chart_recommendation` (BR-19); compact supporting table for Rich CLI rendering; default omits raw SQL/tool trace |
+| `recommend_chart(dataframe)` | pandas `DataFrame` of supporting rows | `{chart_type, suggestion}` where `chart_type` is `line` \| `bar` \| `scatter` \| `table only` | Rule-based (no rendering): date/time → line; one categorical + one numeric → bar; two numeric → scatter; else table only. Suggestion text like `Suggested visualization: bar chart (region vs. total revenue)` |
+| `export_dataframe(df, fmt)` | `fmt` — `csv` \| `xlsx` | `Path` to `outputs/export_<UTC-timestamp>.{csv,xlsx}` | Uses pandas `to_csv` / `to_excel` (openpyxl for xlsx) |
 
-## CLI (`python -m src.cli ask`)
+## CLI (`python -m src.cli`)
+
+### `ask`
 
 | Flag | Default | Behavior |
 | --- | --- | --- |
 | `--verbose` / `-v` | off | Show underlying SQL and tool trace after the narrative + table |
+| `--no-redact` | off | Disable row-value redaction in `logs/run_*.jsonl` (local debugging only; never use in CI smoke) |
+| `--export {csv,xlsx}` | off | Write the supporting evidence DataFrame to `outputs/export_<timestamp>.{csv,xlsx}` |
+
+### `replay`
+
+| Argument | Behavior |
+| --- | --- |
+| `replay <path-to-trace.jsonl>` | Pretty-print a v2-5 JSONL run trace (per-step summary + session latency/tokens/cost) without calling the LLM |
+
+## Run logger (`src/run_logger.py`)
+
+Structured session traces for offline eval / replay (v2 ADR-010 / BR-15, BR-17). Each `ask` session writes `logs/run_<UTC-timestamp>.jsonl` — one JSON object per step.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `step_type` | `"plan"` \| `"tool_call"` \| `"observe"` \| `"verify"` | Emitted by the orchestrator around LLM plan turns, tool selection, tool results, and verification |
+| `timestamp` | ISO-8601 UTC string | When the step was recorded |
+| `latency_ms` | int | Wall-clock duration for that step |
+| `tokens_used` | int | Tokens reported by the provider for the step (0 when N/A) |
+| `cost_estimate_usd` | float | Approximate USD from a static per-provider/model price table (estimate only) |
+| `payload` | object | Step details; **row values redacted by default** |
+
+**Default redaction** replaces tabular `rows` with a shape placeholder:
+
+```json
+{"_redacted": true, "row_count": 2, "columns": ["region", "n"]}
+```
+
+SQL text, tool names, and non-row fields are kept. Pass `--no-redact` to persist raw row values locally; the smoke-gate CI job never enables this flag.
+
+| Symbol | Interface | Notes |
+| --- | --- | --- |
+| `RunLogger(redact=True, …)` | writes JSONL under `logs/` | `redact=False` ≡ CLI `--no-redact` |
+| `redact_payload(obj)` | recursive redact of `rows` lists | Used when `redact=True` |
+| `estimate_cost_usd(tokens, provider?, model?)` | float | Keyed off `LLM_PROVIDER` / `LLM_MODEL` |
 
 ## LLM client (`src/llm_client.py`)
 
@@ -43,12 +82,34 @@ Production plan → execute → reflect loop (Phase 3 Document 3 LLD), with POC 
 
 | Symbol | Interface | Notes |
 | --- | --- | --- |
-| `InvestigationState` | `question`, `schema`, `evidence`, `iterations` (+ draft / clarification fields) | Matches LLD state object |
-| `investigate(question, …) -> dict` | Bounded by `MAX_ITERATIONS` (default 8) | Preloads schema; retries Nebius via `NEBIUS_MAX_RETRIES` |
+| `InvestigationState` | `question`, `schema`, `evidence`, `iterations`, `defaults_used` (+ draft / clarification fields) | Matches LLD state object; `defaults_used` records glossary fallbacks applied while planning (BR-12) |
+| `investigate(question, …) -> dict` | Bounded by `MAX_ITERATIONS` (default 8) | Preloads schema; injects glossary context via `format_glossary_context()` on each plan turn; records `defaults_used`; retries LLM via `NEBIUS_MAX_RETRIES`; optional `run_logger=` for JSONL tracing |
 | Plan tools | `run_sql`, `ready_to_answer` (ANSWER_READY), `needs_clarification` | Exactly one tool per plan turn |
 | Result `status` | `ok` \| `uncertain` \| `needs_clarification` \| `verification_failed` | Cap → `uncertain`; ambiguity → clarifying question (BR-7); verify after draft |
 
 `needs_clarification` arguments: `clarifying_question` (required), `reason` (optional).
+
+## Semantic glossary (`src/glossary_loader.py`)
+
+Config-driven business terms loaded into every orchestrator **plan** turn (v2 ADR-007 / BR-11).
+
+| Symbol | Interface | Notes |
+| --- | --- | --- |
+| `config/glossary.yaml` | Map of `term` → `{definition, default_join?, …}` | Seeded for the sample retail schema; BYO DBs should add their own entries |
+| `load_glossary(path?)` | `dict[str, dict]` | Missing/unreadable file → `{}` + warning (never raises for missing file) |
+| `detect_defaults_used(question, glossary?)` | `list[str]` | Human-readable assumption phrases for glossary fallbacks that apply to the question |
+
+**Context block shape** (included alongside the schema snapshot in the plan user message):
+
+```text
+Semantic glossary (canonical business terms — prefer these over guessing):
+- average_order_value: mean of per-order totals, ...
+  default_join: orders JOIN order_items ON ...
+- default_time_window: when a question doesn't specify a date range, default to all available data
+- revenue: sum of order_items.line_total
+  default_join: order_items JOIN products ON ...
+- …
+```
 
 ### `run_stats` params (allow-listed)
 
@@ -59,4 +120,42 @@ Production plan → execute → reflect loop (Phase 3 Document 3 LLD), with POC 
 | `outlier_zscore` | `column`; optional `threshold` (default 3) | `{threshold, mean, std, outlier_count, outliers, rows}` |
 | `correlation` | `col_a`, `col_b` | `{col_a, col_b, correlation}` |
 | `segment` | `group_col`, `metric_col`; optional `func` (default `mean`) | list of segment summary rows |
+
+## MCP Server (`src/mcp_server.py`)
+
+Model Context Protocol server (v2 ADR-009 / BR-18) that exposes **exactly one** tool — the full agent loop — rather than low-level SQL/schema primitives.
+
+| Item | Detail |
+| --- | --- |
+| Entrypoint | `python -m src.mcp_server` (stdio). Docker: `docker compose up mcp` (image entrypoint `python -m mcp_server`) |
+| Tool | `ask_data_question(question: str, database_url: str) -> str` |
+| Behavior | Sets `READONLY_DATABASE_URL` / `DATABASE_URL` for the call, then runs `investigate()` (schema preload, glossary, plan/execute/reflect/verify) + `format_output()` and returns **narrative text only** |
+| Not exposed | `introspect_schema`, `run_sql`, `run_stats`, `verify` |
+
+### Environment variables
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `LLM_PROVIDER` | no (default `nebius`) | Same provider abstraction as the CLI |
+| `NEBIUS_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` | one of | Only the selected provider’s key |
+| `LLM_MODEL` | no | Optional override of the provider default model |
+| `NEBIUS_*` / `MAX_ITERATIONS` / `ROW_LIMIT` / `QUERY_TIMEOUT_SECONDS` | no | Same knobs as CLI / SQL executor |
+| `READONLY_DATABASE_URL` / `DATABASE_URL` | optional default | Overridden per call by the tool’s `database_url` argument (prefer a read-only role URL) |
+
+Underlying helper for tests / embedding: `ask_data_question(question, database_url, *, client=None) -> str`.
+
+## Evaluation harness (`eval/eval_harness.py`)
+
+Offline / nightly only — never invoked by CI (smoke uses `eval/run_smoke.py`).
+
+| Flag | Purpose |
+| --- | --- |
+| `--benchmark PATH` | Benchmark JSON (v1 array or v2 `{questions: [...]}`). Default: `eval/benchmark_questions.json`. |
+| `--compare-models` | Packaged BR-14 demo after **CR-2 / ADR-011 (CR-2)**: run `benchmark_v2` once per Nebius-hosted model in `NEBIUS_COMPARE_MODELS` (or `--models`) and write `eval/results/comparison_v2.md` (model×score + notable differences). Same `NebiusProvider`, different `model` each run. |
+| `--models IDS` | Comma-separated Nebius model ids for `--compare-models` (overrides `NEBIUS_COMPARE_MODELS`). |
+| `--compare-providers` | Legacy multi-provider matrix (Nebius / OpenAI / Anthropic / Google). Prefer `--compare-models` for the packaged demo; keep for operators with valid keys for each provider. |
+
+**RTM / BR-14 (amended by CR-2):** cross-model evaluation comparison across configurable Nebius-hosted models. The multi-provider `LLMProvider` abstraction (v1.1 ADR-011) is unchanged — OpenAI / Anthropic / Google remain fully supported when credentials are valid; only the packaged comparison report defaults to Nebius-hosted models.
+
+Env: `NEBIUS_COMPARE_MODELS` (comma-separated catalog ids; see `.env.example` — re-check Nebius AI Studio availability over time).
 

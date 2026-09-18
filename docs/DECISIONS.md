@@ -148,3 +148,42 @@ Throwaway spike (`src/orchestrator/poc.py`, `src/tools/verifier.py`, `scripts/ru
 
 **Consequences:** BR-10 is amended from “must use Nebius” to “must support at least one hosted provider, Nebius by default.” Each new provider is one more adapter to maintain and test. Orchestrator/verifier/formatter depend on the interface, not Nebius HTTP details.
 
+## ADR-007 (v2.0): Lightweight semantic layer via config-driven glossary
+
+**Status:** Accepted
+
+**Context:** The v1 evaluation report showed the agent silently defaulting to an all-time window on an open-ended question (BQ-11) rather than disclosing the assumption. A full semantic-layer product (dbt metrics, Cube, LookML) would address this but is heavier than a portfolio-scale project needs. *(Numbering note: this is the v2.0 ADR-007 from the v2 scope document; v1 ADR-007 above remains the SELECT-validation decision.)*
+
+**Decision:** Introduce a small YAML glossary (`config/glossary.yaml`) loaded into the orchestrator’s planning context (v2-1 / BR-11). When planning applies a glossary default to resolve ambiguity, record it on `InvestigationState.defaults_used` and append an explicit `Assumption:` line in `format_output` (v2-2 / BR-12).
+
+**Alternatives considered:** Full semantic-layer product (rejected: overkill for the seeded schema / self-hosted single-config philosophy); prompt-only “always state assumptions” (rejected: BQ-11 showed this does not hold without a structural fallback).
+
+**Consequences / follow-up (v2-2):** Explicit assumption disclosure closes the BQ-11 silent-default gap from the v1 eval report. Glossary entries remain per-dataset — BYO databases must author their own terms.
+
+## ADR-008 (v2.0): CI smoke subset as PR regression gate
+
+**Status:** Accepted
+
+**Context:** A full ~30-question live-LLM benchmark is too slow and costly to block every PR, but silent quality regressions (e.g. disabling verification) must still be caught before merge. *(Numbering note: this is the v2.0 ADR-008 from the v2 scope document; v1 ADR-008 above remains the OpenAI tools-format decision.)*
+
+**Decision:** Hand-pick a 5-question smoke subset (`eval/smoke_subset.json`: one single-step, two multi-step, two trap/glossary) from `eval/benchmark_v2.json`. Store the green score in `eval/results/smoke_baseline.json`. `eval/run_smoke.py` runs only that subset and exits non-zero if the score drops below the baseline. `--update-baseline` is manual-only (refuses to write from a partial run) and is never invoked in CI. The `eval-smoke` GitHub Actions job runs on every PR with live model calls.
+
+**CI secret requirement:** The smoke job needs a real default-provider API key as a repository secret (`NEBIUS_API_KEY` while `LLM_PROVIDER=nebius`; otherwise the matching provider key). Unit-test CI continues to use a placeholder key and must not depend on live LLM calls.
+
+**Alternatives considered:** Run the full v2 suite on every PR (rejected: latency/cost); mock-only smoke in CI (rejected: would not catch prompt/provider regressions); auto-update baseline on main (rejected: hides regressions).
+
+**Consequences:** PRs are gated on a small live subset; full benchmark remains offline/nightly. Operators must configure the provider secret or the smoke job cannot authenticate.
+
+## ADR-011 (CR-2): Narrow packaged cross-model comparison to Nebius-hosted models only
+
+**Status:** Accepted
+
+**Context:** Live testing of the v2-7 / BR-14 cross-provider comparison surfaced unrelated account-level failures across three of the four configured providers (Nebius `403` pending key rotation, OpenAI with no credits, Google model `404`), none of which reflect a code or design defect in the `LLMProvider` abstraction itself (v1.1 **ADR-011**). *(Numbering note: this is the CR-2 ADR-011; v1.1 ADR-011 above remains the multi-provider abstraction decision.)*
+
+**Decision:** `eval_harness.py`'s packaged `--compare-models` feature compares multiple models within Nebius (`NEBIUS_COMPARE_MODELS`, same `NebiusProvider`, different model ids) rather than across providers. Legacy `--compare-providers` remains available for operators with valid multi-provider credentials. The provider abstraction from v1.1 ADR-011 is unchanged and remains available to anyone with valid credentials for OpenAI / Anthropic / Google.
+
+**Alternatives considered:** Debug and restore all four providers before shipping comparison (rejected — solving vendor account/billing issues isn't the engineering work this feature exists to demonstrate); ship the comparison feature as broken/best-effort across all four (rejected — a working, narrower comparison is more credible than a stub with known failures).
+
+**Consequences:** BR-14 is amended (not replaced) to “cross-model evaluation comparison across configurable Nebius-hosted models.” Packaged `comparison_v2.md` is keyed by Nebius model id. Operators who want a true multi-provider matrix still use `--compare-providers`.
+
+
