@@ -120,8 +120,8 @@ python eval/eval_harness.py --benchmark eval/benchmark_v2.json
 
 Pulled from [`eval/results/report_v2.md`](eval/results/report_v2.md) (live v2 suite blocked this sprint — see that file for provider errors):
 
-- **Live v2 score not yet recorded** — Nebius `403`, OpenAI quota exhausted, Google tool-schema/`model` errors; re-run the harness when a provider is healthy.
+- **Live v2 score not yet recorded** — Nebius `403`, OpenAI credits exhausted, Google model `404` / tool-schema issues; re-run the harness when a provider is healthy.
 - **BQ-07 (multi-step MoM growth)** — often names **Central** but may omit growth magnitude (+6) and month pair in the draft the rubric checks (v1 carryover).
 - **BQ-11 disclosure quality** — structural fix shipped (glossary defaults + `Assumption:` lines); phrasing quality still depends on the model.
-- **Google provider** — OpenAI-shaped tool JSON with `additionalProperties` is rejected by Gemini until the adapter strips unsupported fields.
+- **Google provider** — `gemini-2.0-flash` is no longer available; OpenAI-shaped tool JSON with `additionalProperties` has also been rejected by Gemini until the adapter strips unsupported fields.
 - **Cross-model comparison** — `comparison_v2.md` has no scored providers yet; run `--compare-providers` once keys/quota work.
