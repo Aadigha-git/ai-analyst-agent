@@ -1,6 +1,6 @@
 # Tool / API Specifications
 
-Internal tool contracts the Agent Orchestrator calls (Phase 3 Document 5). The system exposes no public network API in v1.
+Internal tool contracts the Agent Orchestrator calls (Phase 3 Document 5). There is no public HTTP API; the product surfaces are the **CLI** (`python -m src.cli`) and the **MCP server** (`python -m src.mcp_server`, single tool `ask_data_question`).
 
 | Tool | Parameters | Returns | Guardrails |
 | --- | --- | --- | --- |
@@ -12,13 +12,21 @@ Internal tool contracts the Agent Orchestrator calls (Phase 3 Document 5). The s
 | `recommend_chart(dataframe)` | pandas `DataFrame` of supporting rows | `{chart_type, suggestion}` where `chart_type` is `line` \| `bar` \| `scatter` \| `table only` | Rule-based (no rendering): date/time → line; one categorical + one numeric → bar; two numeric → scatter; else table only. Suggestion text like `Suggested visualization: bar chart (region vs. total revenue)` |
 | `export_dataframe(df, fmt)` | `fmt` — `csv` \| `xlsx` | `Path` to `outputs/export_<UTC-timestamp>.{csv,xlsx}` | Uses pandas `to_csv` / `to_excel` (openpyxl for xlsx) |
 
-## CLI (`python -m src.cli ask`)
+## CLI (`python -m src.cli`)
+
+### `ask`
 
 | Flag | Default | Behavior |
 | --- | --- | --- |
 | `--verbose` / `-v` | off | Show underlying SQL and tool trace after the narrative + table |
 | `--no-redact` | off | Disable row-value redaction in `logs/run_*.jsonl` (local debugging only; never use in CI smoke) |
 | `--export {csv,xlsx}` | off | Write the supporting evidence DataFrame to `outputs/export_<timestamp>.{csv,xlsx}` |
+
+### `replay`
+
+| Argument | Behavior |
+| --- | --- |
+| `replay <path-to-trace.jsonl>` | Pretty-print a v2-5 JSONL run trace (per-step summary + session latency/tokens/cost) without calling the LLM |
 
 ## Run logger (`src/run_logger.py`)
 

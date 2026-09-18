@@ -34,5 +34,5 @@
 | v2-8 | Chart recommendation + CSV/XLSX export | BR-19 | — | M | Done |
 | v2-9 | MCP server (`ask_data_question` tool) | BR-18 | — | L | Done |
 | v2-10 | MCP guardrail-parity test | BR-18 | — | M | Done |
-| v2-11 | README / docs update for v2.0 | — | — | S | Planned |
+| v2-11 | README / docs update for v2.0 | — | — | S | Done |
 | v2-12 | Final polish, tag v2.0.0 | All | — | M | Planned |

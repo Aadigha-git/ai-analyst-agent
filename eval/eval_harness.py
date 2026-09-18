@@ -590,9 +590,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.limit and args.limit > 0:
         questions = questions[: args.limit]
 
-    rows, passed, total = run_benchmark(questions)
+    # Prefer report_v2.md when scoring the versioned v2 suite.
+    report_path = REPORT_PATH
+    raw_path = RAW_PATH
+    if Path(args.benchmark).resolve() == BENCHMARK_V2_PATH.resolve() or (
+        Path(args.benchmark).name == "benchmark_v2.json"
+    ):
+        report_path = RESULTS_DIR / "report_v2.md"
+        raw_path = RESULTS_DIR / "latest_run_v2.json"
+
+    rows, passed, total = run_benchmark(
+        questions, report_path=report_path, raw_path=raw_path
+    )
     print(f"Score: {passed}/{total}")
-    print(f"Report: {REPORT_PATH}")
+    print(f"Report: {report_path}")
     return 0 if passed == total else 1
 
 

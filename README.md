@@ -1,6 +1,15 @@
 # ai-analyst-agent
 
-Self-hosted CLI agent that answers natural-language questions over PostgreSQL by **investigating** with SQL/stats tools, then **verifying** before it answers — not by emitting one-shot text-to-SQL.
+Self-hosted CLI (and MCP) agent that answers natural-language questions over PostgreSQL by **investigating** with SQL/stats tools, then **verifying** before it answers — not by emitting one-shot text-to-SQL.
+
+## What's new in v2.0
+
+- **Semantic glossary + assumption disclosure** — `config/glossary.yaml` feeds planning; glossary defaults are recorded and surfaced as explicit `Assumption:` lines (closes the v1 BQ-11 silent-default gap).
+- **Expanded, versioned benchmark + CI regression gate** — `eval/benchmark_v2.json` (30 questions) keeps the v1 file as historical baseline; PRs run a 5-question live smoke subset against `smoke_baseline.json`.
+- **Cross-model comparison** — `eval/eval_harness.py --compare-providers` scores Nebius / OpenAI / Anthropic / Google into `eval/results/comparison_v2.md` (manual/nightly only).
+- **Structured tracing + replay** — each `ask` writes redacted `logs/run_*.jsonl`; `python -m src.cli replay <trace>` pretty-prints steps and session cost totals.
+- **Chart recommendations + export** — rule-based `Suggested visualization: …` plus `--export {csv,xlsx}` under `outputs/`.
+- **MCP server** — single tool `ask_data_question(question, database_url)` wrapping the full investigate → verify → narrative path.
 
 ## Why not single-shot text-to-SQL?
 
@@ -23,7 +32,7 @@ docker compose up -d db   # demo DB only — skip if using your own Postgres
 python -m src.cli ask "Which region had the most orders in January 2025?"
 ```
 
-Add `--verbose` to print underlying SQL and the tool trace. Each `ask` also writes a structured trace under `logs/run_*.jsonl` (row values redacted by default; `--no-redact` for local debugging only).
+Add `--verbose` to print underlying SQL and the tool trace. Each `ask` also writes a structured trace under `logs/run_*.jsonl` (row values redacted by default; `--no-redact` for local debugging only). Use `--export csv` or `--export xlsx` to write the supporting evidence table under `outputs/`.
 
 Replay a prior run without calling the LLM:
 
@@ -69,13 +78,14 @@ Pass a **read-only** Postgres URL as `database_url` on each tool call. See [`doc
 
 1. Run [`scripts/create_readonly_role.sql`](scripts/create_readonly_role.sql) against **each** target database (required for every new database — not a one-time global setup).
 2. Set `READONLY_DATABASE_URL` (and optionally `DATABASE_URL` for admin/setup) in `.env` to that read-only role’s connection string.
-3. Skip `docker compose up -d db` entirely if you are not using the sample data.
+3. Author or extend [`config/glossary.yaml`](config/glossary.yaml) for that dataset’s business terms (v2 semantic glossary — seeded for the sample retail schema only).
+4. Skip `docker compose up -d db` entirely if you are not using the sample data.
 
 **Warning:** The read-only Postgres role is what enforces the “never writes” guarantee. Running the agent with a write-capable role defeats that guarantee regardless of application-level SELECT checks.
 
 ## Architecture
 
-**HLD** — CLI → orchestrator ↔ pluggable LLM provider → tool layer → read-only Postgres; offline eval harness scores runs.
+**HLD** — CLI / MCP → orchestrator ↔ pluggable LLM provider → tool layer → read-only Postgres; offline eval harness scores runs.
 
 ![High-level architecture](docs/images/hld_diagram.png)
 
@@ -87,7 +97,11 @@ More detail: [`docs/API.md`](docs/API.md), [`docs/DECISIONS.md`](docs/DECISIONS.
 
 ## Evaluation
 
-Latest full benchmark: **[10/12](eval/results/report.md)** on the v1.0 12-question seeded-DB suite (see `eval/benchmark_questions.json`). The expanded v2 suite lives in `eval/benchmark_v2.json` (30 questions).
+| Suite | Report | Notes |
+| --- | --- | --- |
+| **v2.0** (30 questions) | **[report_v2.md](eval/results/report_v2.md)** | `eval/benchmark_v2.json` — live score **pending** this sprint (provider auth/quota); re-run with a working key |
+| **v2 cross-model** | **[comparison_v2.md](eval/results/comparison_v2.md)** | `python eval/eval_harness.py --compare-providers` (manual/nightly; not CI) |
+| **v1.0 baseline** | **[10/12](eval/results/report.md)** | `eval/benchmark_questions.json` kept as historical baseline |
 
 ## CI
 
@@ -96,11 +110,18 @@ Pull requests run two gates:
 - **Unit CI** (`.github/workflows/ci.yml` `test` job): lint + pytest against a seeded Postgres service. No live LLM calls (provider key is a placeholder).
 - **Smoke regression** (`eval-smoke` job): runs `eval/run_smoke.py` on a fixed 5-question subset (`eval/smoke_subset.json`) with a **real** default-provider LLM call and fails if the score drops below `eval/results/smoke_baseline.json`. Requires repository secret `NEBIUS_API_KEY` (or the matching key if `LLM_PROVIDER` is changed). Update the baseline only manually via `python eval/run_smoke.py --update-baseline` — never from CI.
 
-The full ~30-question v2 benchmark remains a **manual / nightly** run (`python eval/eval_harness.py --benchmark eval/benchmark_v2.json`), not a PR blocker.
+Do **not** run `--compare-providers` in CI. The full ~30-question v2 benchmark remains a **manual / nightly** run:
+
+```bash
+python eval/eval_harness.py --benchmark eval/benchmark_v2.json
+```
 
 ## Known Limitations
 
-Pulled from the latest eval report:
+Pulled from [`eval/results/report_v2.md`](eval/results/report_v2.md) (live v2 suite blocked this sprint — see that file for provider errors):
 
-- **BQ-07 (multi-step MoM growth):** Correctly names **Central** but often omits growth magnitude (+6) and month pair in the draft answer. Drafts are not yet required to include the supporting scalar(s) the rubric checks.
-- **BQ-11 (trap — Electronics revenue without time window):** Returns the correct all-time total without clarifying or stating the all-dates assumption. Open-ended totals still tend to silent defaults; full fix vs over-clarifying well-scoped questions remains an open tension.
+- **Live v2 score not yet recorded** — Nebius `403`, OpenAI quota exhausted, Google tool-schema/`model` errors; re-run the harness when a provider is healthy.
+- **BQ-07 (multi-step MoM growth)** — often names **Central** but may omit growth magnitude (+6) and month pair in the draft the rubric checks (v1 carryover).
+- **BQ-11 disclosure quality** — structural fix shipped (glossary defaults + `Assumption:` lines); phrasing quality still depends on the model.
+- **Google provider** — OpenAI-shaped tool JSON with `additionalProperties` is rejected by Gemini until the adapter strips unsupported fields.
+- **Cross-model comparison** — `comparison_v2.md` has no scored providers yet; run `--compare-providers` once keys/quota work.
