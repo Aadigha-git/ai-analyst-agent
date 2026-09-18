@@ -46,6 +46,10 @@ v1.0.0 documentation/architecture closeout (README + HLD/LLD embeds).
 
 **Tracing / replay:** Each `ask` writes `logs/run_<timestamp>.jsonl` (row values redacted by default; `--no-redact` local-only). `python -m src.cli replay <trace.jsonl>` pretty-prints steps plus session latency/token/cost totals.
 
-**Cross-model comparison:** Harness writes `eval/results/comparison_v2.md` (provider×score + pass/fail disagreements, glossary/trap called out). **Live headline:** no full multi-provider run landed this sprint (provider keys incomplete / Nebius 403 locally) — highest scorer and disagreements TBD on the first successful `python eval/eval_harness.py --compare-providers` nightly. CI still runs only the 5-question smoke subset.
+**Cross-model comparison:** Originally shipped as `--compare-providers` (provider×score). Live wrap-up hit Nebius `403` (key rotation), OpenAI no credits, and Google model `404` — see **CR-2**. CI still runs only the 5-question smoke subset.
 
 **Export / visualization:** Rule-based `recommend_chart` prints `Suggested visualization: …` (line/bar/scatter/table only); `--export {csv,xlsx}` writes `outputs/export_<timestamp>.*`.
+
+## CR-2
+
+During v2.0 wrap-up, the packaged cross-provider comparison failed for unrelated vendor account reasons (Nebius `403` while the key was being regenerated, OpenAI out of credits, Google `404` on the configured model) — not defects in the `LLMProvider` abstraction (v1.1 ADR-011). **Decision (ADR-011 CR-2):** narrow the packaged demo to `--compare-models` over configurable Nebius-hosted models (`NEBIUS_COMPARE_MODELS`); keep `--compare-providers` as a legacy opt-in. A new Nebius API key resolves the `403`. Smoke stayed **5/5** (default model now `Qwen/Qwen3-235B-A22B-Instruct-2507`); full suite **28/30** in `report_v2.md`; packaged comparison **20 / 20 / 26** (Nano-30B / gpt-oss-120b / Qwen-235B) in `comparison_v2.md`.

@@ -144,3 +144,18 @@ Model Context Protocol server (v2 ADR-009 / BR-18) that exposes **exactly one** 
 
 Underlying helper for tests / embedding: `ask_data_question(question, database_url, *, client=None) -> str`.
 
+## Evaluation harness (`eval/eval_harness.py`)
+
+Offline / nightly only — never invoked by CI (smoke uses `eval/run_smoke.py`).
+
+| Flag | Purpose |
+| --- | --- |
+| `--benchmark PATH` | Benchmark JSON (v1 array or v2 `{questions: [...]}`). Default: `eval/benchmark_questions.json`. |
+| `--compare-models` | Packaged BR-14 demo after **CR-2 / ADR-011 (CR-2)**: run `benchmark_v2` once per Nebius-hosted model in `NEBIUS_COMPARE_MODELS` (or `--models`) and write `eval/results/comparison_v2.md` (model×score + notable differences). Same `NebiusProvider`, different `model` each run. |
+| `--models IDS` | Comma-separated Nebius model ids for `--compare-models` (overrides `NEBIUS_COMPARE_MODELS`). |
+| `--compare-providers` | Legacy multi-provider matrix (Nebius / OpenAI / Anthropic / Google). Prefer `--compare-models` for the packaged demo; keep for operators with valid keys for each provider. |
+
+**RTM / BR-14 (amended by CR-2):** cross-model evaluation comparison across configurable Nebius-hosted models. The multi-provider `LLMProvider` abstraction (v1.1 ADR-011) is unchanged — OpenAI / Anthropic / Google remain fully supported when credentials are valid; only the packaged comparison report defaults to Nebius-hosted models.
+
+Env: `NEBIUS_COMPARE_MODELS` (comma-separated catalog ids; see `.env.example` — re-check Nebius AI Studio availability over time).
+

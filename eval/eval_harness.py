@@ -4,12 +4,15 @@ Usage (repo root, DB up, .env configured):
   NEBIUS_TIMEOUT_SECONDS=180 .venv/bin/python eval/eval_harness.py
   .venv/bin/python eval/eval_harness.py --benchmark eval/benchmark_v2.json
 
-Cross-provider comparison (manual / offline only — NEVER invoke from CI):
-  .venv/bin/python eval/eval_harness.py --compare-providers
+Cross-model comparison within Nebius (manual / offline only — NEVER invoke from CI):
+  .venv/bin/python eval/eval_harness.py --compare-models
 
-``--compare-providers`` makes real API calls to every configured provider against the
-full v2 suite (~30 questions each) and incurs real (small) LLM cost. CI must only
-run the 5-question smoke subset via ``eval/run_smoke.py`` (v2-4).
+``--compare-models`` runs the full v2 suite once per model in ``NEBIUS_COMPARE_MODELS``
+(same NebiusProvider, different model ids) and writes ``eval/results/comparison_v2.md``.
+Real API cost — CI must only run the 5-question smoke subset via ``eval/run_smoke.py`` (v2-4).
+
+Legacy ``--compare-providers`` remains available for operators with multiple provider keys;
+the packaged default demo is ``--compare-models`` (CR-2 / ADR-011 CR-2).
 """
 
 from __future__ import annotations
@@ -53,8 +56,17 @@ REPORT_PATH = RESULTS_DIR / "report.md"
 RAW_PATH = RESULTS_DIR / "latest_run.json"
 COMPARISON_PATH = RESULTS_DIR / "comparison_v2.md"
 
-# Providers compared by --compare-providers (order preserved in the report).
+# Providers compared by legacy --compare-providers (order preserved in the report).
 COMPARE_PROVIDERS = ("nebius", "openai", "anthropic", "google")
+
+# Default Nebius-hosted model ids for --compare-models (CR-2).
+# Sourced from GET {NEBIUS_BASE_URL}/models on 2026-09-18 — re-check the catalog
+# before relying on these strings; hosted availability changes over time.
+DEFAULT_NEBIUS_COMPARE_MODELS = (
+    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B,"
+    "openai/gpt-oss-120b,"
+    "Qwen/Qwen3-235B-A22B-Instruct-2507"
+)
 
 _GRADER_SYSTEM = (
     "You are a strict evaluation grader for a data-analyst agent. "
@@ -369,16 +381,21 @@ def _pass_map(rows: list[dict[str, Any]]) -> dict[str, bool]:
 
 
 def write_comparison_report(
-    results_by_provider: dict[str, list[dict[str, Any]]],
+    results_by_key: dict[str, list[dict[str, Any]]],
     *,
     questions: list[dict[str, Any]],
     skipped: list[tuple[str, str]],
     path: Path = COMPARISON_PATH,
+    key_header: str = "Model",
+    title: str = "Cross-model evaluation comparison (v2)",
 ) -> None:
-    """Write provider×score table plus notable pass/fail disagreements."""
+    """Write key×score table plus notable pass/fail disagreements.
+
+    ``results_by_key`` is keyed by provider name (legacy) or Nebius model id (CR-2).
+    """
     question_meta = {str(q["id"]): q for q in questions}
     lines: list[str] = []
-    lines.append("# Cross-model evaluation comparison (v2)")
+    lines.append(f"# {title}")
     lines.append("")
     lines.append(
         f"_Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}_"
@@ -389,32 +406,36 @@ def write_comparison_report(
         "Not run in CI (smoke subset only)."
     )
     lines.append("")
-    lines.append("## Provider scores")
+    lines.append(f"## {key_header} scores")
     lines.append("")
-    lines.append("| Provider | Score | Model |")
+    note_header = "Model" if key_header == "Provider" else "Notes"
+    lines.append(f"| {key_header} | Score | {note_header} |")
     lines.append("| --- | --- | --- |")
 
-    for provider, rows in results_by_provider.items():
+    for key, rows in results_by_key.items():
         total = len(rows)
         passed = sum(1 for r in rows if r.get("passed"))
-        model = DEFAULT_MODELS.get(provider, "(default)")
-        lines.append(f"| {provider} | **{passed}/{total}** | `{model}` |")
+        if key_header == "Provider":
+            note = f"`{DEFAULT_MODELS.get(key, '(default)')}`"
+        else:
+            note = ""
+        lines.append(f"| `{key}` | **{passed}/{total}** | {note} |")
 
-    for provider, reason in skipped:
-        lines.append(f"| {provider} | _skipped_ | {reason} |")
+    for key, reason in skipped:
+        lines.append(f"| `{key}` | _skipped_ | {reason} |")
 
     lines.append("")
     lines.append("## Notable differences")
     lines.append("")
 
-    providers = list(results_by_provider.keys())
-    if len(providers) < 2:
+    keys = list(results_by_key.keys())
+    if len(keys) < 2:
         lines.append(
-            "Fewer than two providers produced scores, so pass/fail disagreements "
-            "cannot be compared."
+            f"Fewer than two {key_header.lower()}s produced scores, so pass/fail "
+            "disagreements cannot be compared."
         )
     else:
-        pass_maps = {p: _pass_map(rows) for p, rows in results_by_provider.items()}
+        pass_maps = {k: _pass_map(rows) for k, rows in results_by_key.items()}
         all_ids = sorted(
             {qid for pm in pass_maps.values() for qid in pm},
             key=lambda qid: (
@@ -425,14 +446,12 @@ def write_comparison_report(
         disagreements: list[str] = []
         glossary_trap_notes: list[str] = []
         for qid in all_ids:
-            outcomes = {
-                p: pass_maps[p].get(qid) for p in providers if qid in pass_maps[p]
-            }
+            outcomes = {k: pass_maps[k].get(qid) for k in keys if qid in pass_maps[k]}
             if len(set(outcomes.values())) <= 1:
                 continue
             meta = question_meta.get(qid) or {}
             verdict = ", ".join(
-                f"{p}={'PASS' if ok else 'FAIL'}" for p, ok in outcomes.items()
+                f"{k}={'PASS' if ok else 'FAIL'}" for k, ok in outcomes.items()
             )
             flags: list[str] = []
             if meta.get("tests_glossary"):
@@ -447,15 +466,15 @@ def write_comparison_report(
 
         if not disagreements:
             lines.append(
-                "No pass/fail disagreements across providers that completed the suite."
+                f"No pass/fail disagreements across {key_header.lower()}s that "
+                "completed the suite."
             )
         else:
             lines.append(
-                "Questions where providers disagreed on pass/fail "
+                f"Questions where {key_header.lower()}s disagreed on pass/fail "
                 "(glossary-default disclosure and trap items called out first when present):"
             )
             lines.append("")
-            # Prefer glossary/trap disagreements at the top of the section.
             for bullet in glossary_trap_notes:
                 lines.append(bullet)
             for bullet in disagreements:
@@ -473,11 +492,11 @@ def run_compare_providers(
     providers: tuple[str, ...] = COMPARE_PROVIDERS,
     comparison_path: Path = COMPARISON_PATH,
 ) -> int:
-    """Run the full suite once per provider and write ``comparison_v2.md``.
+    """Legacy: run the full suite once per provider and write ``comparison_v2.md``.
 
+    Prefer ``--compare-models`` / ``run_compare_models`` for the packaged demo (CR-2).
     WARNING: Makes real multi-provider API calls and costs real (small) money.
-    Intended for manual / nightly use only — never invoke from CI. The PR smoke
-    gate (v2-4) runs ``eval/run_smoke.py`` on a 5-question subset instead.
+    Never invoke from CI.
     """
     results_by_provider: dict[str, list[dict[str, Any]]] = {}
     skipped: list[tuple[str, str]] = []
@@ -491,8 +510,6 @@ def run_compare_providers(
             skipped.append((provider, msg))
             continue
 
-        # Use each provider's default model so a global LLM_MODEL (e.g. Nebius id)
-        # does not get applied to OpenAI/Anthropic/Google.
         model = DEFAULT_MODELS.get(provider)
         logger.info(
             "=== compare-providers: starting %s (model=%s) ===", provider, model
@@ -530,10 +547,94 @@ def run_compare_providers(
         questions=questions,
         skipped=skipped,
         path=comparison_path,
+        key_header="Provider",
+        title="Cross-provider evaluation comparison (v2, legacy)",
     )
     print(f"Comparison report: {comparison_path}")
-    # Partial provider coverage is OK — do not fail the whole run for missing keys.
     return 0 if results_by_provider else 1
+
+
+def parse_nebius_compare_models(raw: str | None = None) -> list[str]:
+    """Parse comma-separated Nebius model ids from env or ``raw``."""
+    text = (
+        raw
+        if raw is not None
+        else os.getenv("NEBIUS_COMPARE_MODELS", DEFAULT_NEBIUS_COMPARE_MODELS)
+    )
+    return [part.strip() for part in str(text).split(",") if part.strip()]
+
+
+def run_compare_models(
+    questions: list[dict[str, Any]],
+    *,
+    models: list[str] | None = None,
+    comparison_path: Path = COMPARISON_PATH,
+) -> int:
+    """Run the full suite once per Nebius-hosted model; write ``comparison_v2.md``.
+
+    WARNING: Makes real Nebius API calls (one full v2 suite per model) and costs
+    real (small) money. Manual / nightly only — never invoke from CI.
+    """
+    model_ids = models if models is not None else parse_nebius_compare_models()
+    if not model_ids:
+        print(
+            "ERROR: no models to compare — set NEBIUS_COMPARE_MODELS "
+            "or pass --models",
+            file=sys.stderr,
+        )
+        return 1
+
+    if not provider_api_key_configured("nebius"):
+        print(
+            "ERROR: NEBIUS_API_KEY is required for --compare-models",
+            file=sys.stderr,
+        )
+        return 1
+
+    results_by_model: dict[str, list[dict[str, Any]]] = {}
+    skipped: list[tuple[str, str]] = []
+
+    for model in model_ids:
+        logger.info("=== compare-models: starting Nebius model=%s ===", model)
+        try:
+            client = get_llm_provider("nebius", model=model)
+        except Exception as exc:  # noqa: BLE001
+            msg = f"failed to init: {exc}"
+            logger.warning("Skipping model %s — %s", model, msg)
+            print(f"WARN: skipping {model} ({msg})", file=sys.stderr)
+            skipped.append((model, msg))
+            continue
+
+        safe = model.replace("/", "_")
+        report_path = RESULTS_DIR / f"report_nebius_{safe}_v2.md"
+        raw_path = RESULTS_DIR / f"latest_run_nebius_{safe}_v2.json"
+        try:
+            rows, passed, total = run_benchmark(
+                questions,
+                client=client,
+                report_path=report_path,
+                raw_path=raw_path,
+            )
+        except Exception as exc:  # noqa: BLE001
+            msg = f"run failed: {exc}"
+            logger.exception("Model %s aborted", model)
+            print(f"WARN: skipping remainder for {model} ({msg})", file=sys.stderr)
+            skipped.append((model, msg))
+            continue
+
+        results_by_model[model] = rows
+        print(f"{model}: {passed}/{total}")
+
+    write_comparison_report(
+        results_by_model,
+        questions=questions,
+        skipped=skipped,
+        path=comparison_path,
+        key_header="Model",
+        title="Cross-model evaluation comparison (v2, Nebius-hosted)",
+    )
+    print(f"Comparison report: {comparison_path}")
+    return 0 if results_by_model else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -557,18 +658,37 @@ def main(argv: list[str] | None = None) -> int:
         help="Comma-separated question ids to run (optional)",
     )
     parser.add_argument(
+        "--compare-models",
+        action="store_true",
+        help=(
+            "Run benchmark_v2 once per Nebius model in NEBIUS_COMPARE_MODELS "
+            "(or --models) and write eval/results/comparison_v2.md. Packaged "
+            "default for BR-14 after CR-2. Real API cost — never used by CI."
+        ),
+    )
+    parser.add_argument(
+        "--models",
+        type=str,
+        default="",
+        help=(
+            "Comma-separated Nebius model ids for --compare-models "
+            "(overrides NEBIUS_COMPARE_MODELS)"
+        ),
+    )
+    parser.add_argument(
         "--compare-providers",
         action="store_true",
         help=(
-            "Run benchmark_v2 once per configured provider and write "
-            "eval/results/comparison_v2.md. Real multi-provider API cost — "
-            "manual/nightly only; never used by CI (see eval/run_smoke.py)."
+            "Legacy: run benchmark_v2 once per configured provider. Prefer "
+            "--compare-models for the packaged Nebius demo (CR-2)."
         ),
     )
     args = parser.parse_args(argv)
 
-    if args.compare_providers:
-        # Always use the v2 suite for cross-model comparison unless overridden.
+    if args.compare_models and args.compare_providers:
+        raise SystemExit("Use only one of --compare-models or --compare-providers")
+
+    if args.compare_models or args.compare_providers:
         bench_path = (
             args.benchmark if args.benchmark != BENCHMARK_PATH else BENCHMARK_V2_PATH
         )
@@ -578,6 +698,13 @@ def main(argv: list[str] | None = None) -> int:
             questions = [q for q in questions if q["id"] in wanted]
         if args.limit and args.limit > 0:
             questions = questions[: args.limit]
+        if args.compare_models:
+            models = (
+                parse_nebius_compare_models(args.models)
+                if args.models.strip()
+                else parse_nebius_compare_models()
+            )
+            return run_compare_models(questions, models=models)
         return run_compare_providers(questions)
 
     questions = load_benchmark(args.benchmark)

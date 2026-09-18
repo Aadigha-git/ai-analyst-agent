@@ -174,4 +174,16 @@ Throwaway spike (`src/orchestrator/poc.py`, `src/tools/verifier.py`, `scripts/ru
 
 **Consequences:** PRs are gated on a small live subset; full benchmark remains offline/nightly. Operators must configure the provider secret or the smoke job cannot authenticate.
 
+## ADR-011 (CR-2): Narrow packaged cross-model comparison to Nebius-hosted models only
+
+**Status:** Accepted
+
+**Context:** Live testing of the v2-7 / BR-14 cross-provider comparison surfaced unrelated account-level failures across three of the four configured providers (Nebius `403` pending key rotation, OpenAI with no credits, Google model `404`), none of which reflect a code or design defect in the `LLMProvider` abstraction itself (v1.1 **ADR-011**). *(Numbering note: this is the CR-2 ADR-011; v1.1 ADR-011 above remains the multi-provider abstraction decision.)*
+
+**Decision:** `eval_harness.py`'s packaged `--compare-models` feature compares multiple models within Nebius (`NEBIUS_COMPARE_MODELS`, same `NebiusProvider`, different model ids) rather than across providers. Legacy `--compare-providers` remains available for operators with valid multi-provider credentials. The provider abstraction from v1.1 ADR-011 is unchanged and remains available to anyone with valid credentials for OpenAI / Anthropic / Google.
+
+**Alternatives considered:** Debug and restore all four providers before shipping comparison (rejected — solving vendor account/billing issues isn't the engineering work this feature exists to demonstrate); ship the comparison feature as broken/best-effort across all four (rejected — a working, narrower comparison is more credible than a stub with known failures).
+
+**Consequences:** BR-14 is amended (not replaced) to “cross-model evaluation comparison across configurable Nebius-hosted models.” Packaged `comparison_v2.md` is keyed by Nebius model id. Operators who want a true multi-provider matrix still use `--compare-providers`.
+
 

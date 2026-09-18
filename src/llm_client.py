@@ -26,7 +26,7 @@ ToolSchema = dict[str, Any]
 DEFAULT_PROVIDER = "nebius"
 
 DEFAULT_MODELS: dict[str, str] = {
-    "nebius": "meta-llama/Llama-3.3-70B-Instruct",
+    "nebius": "Qwen/Qwen3-235B-A22B-Instruct-2507",
     "openai": "gpt-4o-mini",
     "anthropic": "claude-sonnet-4-20250514",
     "google": "gemini-2.0-flash",

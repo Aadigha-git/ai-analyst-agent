@@ -1,4 +1,4 @@
-"""Tests for cross-provider comparison reporting (v2-7 / BR-14)."""
+"""Tests for cross-model / legacy cross-provider comparison reporting (v2-7 / CR-2)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,10 @@ sys.path.insert(0, str(ROOT / "eval"))
 
 from eval_harness import (  # noqa: E402
     COMPARE_PROVIDERS,
+    DEFAULT_NEBIUS_COMPARE_MODELS,
+    parse_nebius_compare_models,
     provider_api_key_configured,
+    run_compare_models,
     run_compare_providers,
     write_comparison_report,
 )
@@ -18,6 +21,19 @@ from eval_harness import (  # noqa: E402
 
 def test_compare_providers_constant_covers_four() -> None:
     assert COMPARE_PROVIDERS == ("nebius", "openai", "anthropic", "google")
+
+
+def test_default_nebius_compare_models_has_three_tiers() -> None:
+    models = parse_nebius_compare_models(DEFAULT_NEBIUS_COMPARE_MODELS)
+    assert len(models) == 3
+    assert "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B" in models
+    assert "openai/gpt-oss-120b" in models
+    assert "Qwen/Qwen3-235B-A22B-Instruct-2507" in models
+
+
+def test_parse_nebius_compare_models_from_env(monkeypatch) -> None:
+    monkeypatch.setenv("NEBIUS_COMPARE_MODELS", "a/b, c/d")
+    assert parse_nebius_compare_models() == ["a/b", "c/d"]
 
 
 def test_write_comparison_report_scores_and_disagreements(tmp_path: Path) -> None:
@@ -42,12 +58,12 @@ def test_write_comparison_report_scores_and_disagreements(tmp_path: Path) -> Non
         },
     ]
     results = {
-        "nebius": [
+        "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": [
             {"id": "BQ-01", "passed": True},
             {"id": "BQ-11", "passed": True},
             {"id": "BQ-12", "passed": True},
         ],
-        "openai": [
+        "openai/gpt-oss-120b": [
             {"id": "BQ-01", "passed": True},
             {"id": "BQ-11", "passed": False},
             {"id": "BQ-12", "passed": True},
@@ -57,19 +73,42 @@ def test_write_comparison_report_scores_and_disagreements(tmp_path: Path) -> Non
     write_comparison_report(
         results,
         questions=questions,
-        skipped=[("anthropic", "`ANTHROPIC_API_KEY` not set")],
+        skipped=[("Qwen/Qwen3-235B-A22B-Instruct-2507", "quota exceeded")],
         path=path,
+        key_header="Model",
+        title="Cross-model evaluation comparison (v2, Nebius-hosted)",
     )
     text = path.read_text(encoding="utf-8")
-    assert "| nebius | **3/3** |" in text
-    assert "| openai | **2/3** |" in text
-    assert "| anthropic | _skipped_ |" in text
+    assert "## Model scores" in text
+    assert "| `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | **3/3** |" in text
+    assert "| `openai/gpt-oss-120b` | **2/3** |" in text
+    assert "| `Qwen/Qwen3-235B-A22B-Instruct-2507` | _skipped_ |" in text
     assert "## Notable differences" in text
     assert "BQ-11" in text
     assert "glossary-default / disclosure" in text
     assert "trap" in text
-    assert "nebius=PASS" in text and "openai=FAIL" in text
+    assert "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B=PASS" in text
+    assert "openai/gpt-oss-120b=FAIL" in text
     assert "Not run in CI" in text
+
+
+def test_write_comparison_report_provider_legacy(tmp_path: Path) -> None:
+    questions = [
+        {"id": "BQ-01", "question": "x", "tests_glossary": False, "is_trap": False},
+    ]
+    path = tmp_path / "comparison_v2.md"
+    write_comparison_report(
+        {"nebius": [{"id": "BQ-01", "passed": True}]},
+        questions=questions,
+        skipped=[("openai", "`OPENAI_API_KEY` not set")],
+        path=path,
+        key_header="Provider",
+        title="Cross-provider evaluation comparison (v2, legacy)",
+    )
+    text = path.read_text(encoding="utf-8")
+    assert "## Provider scores" in text
+    assert "| `nebius` | **1/1** |" in text
+    assert "| `openai` | _skipped_ |" in text
 
 
 def test_run_compare_providers_skips_missing_keys(tmp_path: Path, monkeypatch) -> None:
@@ -98,6 +137,24 @@ def test_run_compare_providers_skips_missing_keys(tmp_path: Path, monkeypatch) -
     assert called["n"] == 0
     assert out.exists()
     assert "skipped" in out.read_text(encoding="utf-8").lower()
+
+
+def test_run_compare_models_requires_nebius_key(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("NEBIUS_API_KEY", raising=False)
+    called = {"n": 0}
+
+    def boom(*args, **kwargs):
+        called["n"] += 1
+        raise AssertionError("run_benchmark must not be called without Nebius key")
+
+    monkeypatch.setattr("eval_harness.run_benchmark", boom)
+    rc = run_compare_models(
+        [{"id": "BQ-01", "question": "x", "tests_glossary": False, "is_trap": False}],
+        models=["openai/gpt-oss-120b"],
+        comparison_path=tmp_path / "comparison_v2.md",
+    )
+    assert rc == 1
+    assert called["n"] == 0
 
 
 def test_provider_api_key_configured(monkeypatch) -> None:

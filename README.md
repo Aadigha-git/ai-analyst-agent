@@ -6,7 +6,7 @@ Self-hosted CLI (and MCP) agent that answers natural-language questions over Pos
 
 - **Semantic glossary + assumption disclosure** — `config/glossary.yaml` feeds planning; glossary defaults are recorded and surfaced as explicit `Assumption:` lines (closes the v1 BQ-11 silent-default gap).
 - **Expanded, versioned benchmark + CI regression gate** — `eval/benchmark_v2.json` (30 questions) keeps the v1 file as historical baseline; PRs run a 5-question live smoke subset against `smoke_baseline.json`.
-- **Cross-model comparison** — `eval/eval_harness.py --compare-providers` scores Nebius / OpenAI / Anthropic / Google into `eval/results/comparison_v2.md` (manual/nightly only).
+- **Cross-model comparison** — `eval/eval_harness.py --compare-models` scores multiple Nebius-hosted models (`NEBIUS_COMPARE_MODELS`) into `eval/results/comparison_v2.md` (manual/nightly only; CR-2).
 - **Structured tracing + replay** — each `ask` writes redacted `logs/run_*.jsonl`; `python -m src.cli replay <trace>` pretty-prints steps and session cost totals.
 - **Chart recommendations + export** — rule-based `Suggested visualization: …` plus `--export {csv,xlsx}` under `outputs/`.
 - **MCP server** — single tool `ask_data_question(question, database_url)` wrapping the full investigate → verify → narrative path.
@@ -99,8 +99,8 @@ More detail: [`docs/API.md`](docs/API.md), [`docs/DECISIONS.md`](docs/DECISIONS.
 
 | Suite | Report | Notes |
 | --- | --- | --- |
-| **v2.0** (30 questions) | **[report_v2.md](eval/results/report_v2.md)** | `eval/benchmark_v2.json` — live score **pending** this sprint (provider auth/quota); re-run with a working key |
-| **v2 cross-model** | **[comparison_v2.md](eval/results/comparison_v2.md)** | `python eval/eval_harness.py --compare-providers` (manual/nightly; not CI) |
+| **v2.0** (30 questions) | **[report_v2.md](eval/results/report_v2.md)** | `eval/benchmark_v2.json` — live score **28/30** (Nebius `Qwen/Qwen3-235B-A22B-Instruct-2507`, CR-2 re-key) |
+| **v2 cross-model** | **[comparison_v2.md](eval/results/comparison_v2.md)** | `python eval/eval_harness.py --compare-models` (Nebius-hosted models; manual/nightly; not CI) |
 | **v1.0 baseline** | **[10/12](eval/results/report.md)** | `eval/benchmark_questions.json` kept as historical baseline |
 
 ## CI
@@ -110,7 +110,7 @@ Pull requests run two gates:
 - **Unit CI** (`.github/workflows/ci.yml` `test` job): lint + pytest against a seeded Postgres service. No live LLM calls (provider key is a placeholder).
 - **Smoke regression** (`eval-smoke` job): runs `eval/run_smoke.py` on a fixed 5-question subset (`eval/smoke_subset.json`) with a **real** default-provider LLM call and fails if the score drops below `eval/results/smoke_baseline.json`. Requires repository secret `NEBIUS_API_KEY` (or the matching key if `LLM_PROVIDER` is changed). Update the baseline only manually via `python eval/run_smoke.py --update-baseline` — never from CI.
 
-Do **not** run `--compare-providers` in CI. The full ~30-question v2 benchmark remains a **manual / nightly** run:
+Do **not** run `--compare-models` (or legacy `--compare-providers`) in CI. The full ~30-question v2 benchmark remains a **manual / nightly** run:
 
 ```bash
 python eval/eval_harness.py --benchmark eval/benchmark_v2.json
@@ -118,10 +118,11 @@ python eval/eval_harness.py --benchmark eval/benchmark_v2.json
 
 ## Known Limitations
 
-Pulled from [`eval/results/report_v2.md`](eval/results/report_v2.md) (live v2 suite blocked this sprint — see that file for provider errors):
+Pulled from [`eval/results/report_v2.md`](eval/results/report_v2.md) (**28/30**, CR-2 Nebius re-key):
 
-- **Live v2 score not yet recorded** — Nebius `403`, OpenAI credits exhausted, Google model `404` / tool-schema issues; re-run the harness when a provider is healthy.
-- **BQ-07 (multi-step MoM growth)** — often names **Central** but may omit growth magnitude (+6) and month pair in the draft the rubric checks (v1 carryover).
+- **Multi-provider abstraction vs packaged comparison** — OpenAI / Anthropic / Google remain fully supported via `LLM_PROVIDER` when you configure valid credentials. The packaged `comparison_v2.md` demo only exercises Nebius-hosted models (`--compare-models` / CR-2) so the report stays reproducible without depending on unrelated vendor billing/account state.
+- **BQ-09 (multi-step join)** — can still fail to complete the Consumer×web order-count join within the iteration cap (`multi_step` / uncertain).
+- **BQ-18 (verification)** — draft can name Electronics correctly then fail verification on a malformed follow-up SQL (`syntax error at or near "LIMIT"`).
 - **BQ-11 disclosure quality** — structural fix shipped (glossary defaults + `Assumption:` lines); phrasing quality still depends on the model.
-- **Google provider** — `gemini-2.0-flash` is no longer available; OpenAI-shaped tool JSON with `additionalProperties` has also been rejected by Gemini until the adapter strips unsupported fields.
-- **Cross-model comparison** — `comparison_v2.md` has no scored providers yet; run `--compare-providers` once keys/quota work.
+- **Google provider** — configured Gemini model ids may 404 depending on account/API version; OpenAI-shaped tool JSON with `additionalProperties` can also be rejected until the adapter strips unsupported fields.
+- **Hosted model catalog drift** — Nebius model ids in `NEBIUS_COMPARE_MODELS` / `.env.example` should be re-checked against the current Nebius AI Studio catalog; availability changes over time.

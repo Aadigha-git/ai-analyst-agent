@@ -1,37 +1,59 @@
-# Evaluation Report (v2)
+# Evaluation Report
 
-_Generated: 2026-09-18 21:30 UTC_
+_Generated: 2026-09-18 22:54 UTC_
 
-## Overall score: **pending (live run blocked)**
+## Overall score: **28/30**
 
-Attempted `python eval/eval_harness.py --benchmark eval/benchmark_v2.json` this sprint against configured providers. No complete 30/30 scorecard was produced:
+| ID | Pass | Multi-step | Trap | Agent status | Failure category |
+| --- | --- | --- | --- | --- | --- |
+| BQ-01 | PASS | no | no | ok | — |
+| BQ-02 | PASS | no | no | ok | — |
+| BQ-03 | PASS | no | no | ok | — |
+| BQ-04 | PASS | no | no | ok | — |
+| BQ-05 | PASS | no | no | ok | — |
+| BQ-06 | PASS | no | no | ok | — |
+| BQ-07 | PASS | yes | no | ok | — |
+| BQ-08 | PASS | yes | no | ok | — |
+| BQ-09 | FAIL | yes | no | uncertain | multi_step |
+| BQ-10 | PASS | yes | no | ok | — |
+| BQ-11 | PASS | yes | yes | ok | — |
+| BQ-12 | PASS | no | yes | needs_clarification | — |
+| BQ-13 | PASS | no | no | ok | — |
+| BQ-14 | PASS | no | no | ok | — |
+| BQ-15 | PASS | yes | no | ok | — |
+| BQ-16 | PASS | yes | no | ok | — |
+| BQ-17 | PASS | yes | no | ok | — |
+| BQ-18 | FAIL | yes | no | verification_failed | verification |
+| BQ-19 | PASS | no | no | ok | — |
+| BQ-20 | PASS | yes | no | ok | — |
+| BQ-21 | PASS | no | no | ok | — |
+| BQ-22 | PASS | no | no | ok | — |
+| BQ-23 | PASS | no | no | ok | — |
+| BQ-24 | PASS | yes | no | ok | — |
+| BQ-25 | PASS | no | no | ok | — |
+| BQ-26 | PASS | yes | no | ok | — |
+| BQ-27 | PASS | yes | no | ok | — |
+| BQ-28 | PASS | yes | no | ok | — |
+| BQ-29 | PASS | yes | no | ok | — |
+| BQ-30 | PASS | yes | no | ok | — |
 
-| Provider | Result |
-| --- | --- |
-| Nebius (default) | `403 Forbidden` on chat completions |
-| OpenAI | `429` — no credits remaining |
-| Google (`gemini-2.0-flash`) | `404` — model no longer available (API suggests a newer Gemini Flash id); prior tool-schema `additionalProperties` `400` also observed |
-| Anthropic | API key not configured |
+## Failure notes
 
-Re-run when a working provider key/quota (and a supported Google model id, if using Gemini) is available:
+### BQ-09 — `multi_step`
 
-```bash
-LLM_PROVIDER=<provider> python eval/eval_harness.py --benchmark eval/benchmark_v2.json
-# writes eval/results/report_v2.md (override path via harness report naming or copy from report.md)
-```
+- **Question:** How many orders did Consumer-segment customers place via the web channel?
+- **Expected:** 20
+- **Agent (uncertain):** [uncertain] Could not reach a confident answer within the iteration cap.
+- **Grader:** The agent failed to produce the correct answer, did not perform the required join between orders and customers tables, and did not apply the necessary filters for segment='Consumer' and channel='web'. The failure is categorized as multi_step because the solution requires joining tables and applying multiple conditions, none of which were executed.
+- **Note:** Failure attributed to multi-step reasoning (join / second-query path).
 
-Historical **v1** baseline remains **[10/12](report.md)** on `eval/benchmark_questions.json`.
+### BQ-18 — `verification`
 
-## Failure notes (live v2)
+- **Question:** Which product category has the highest total revenue?
+- **Expected:** Electronics, with revenue 157640.18
+- **Agent (verification_failed):** [verification_failed] draft=The product category with the highest total revenue is Electronics, generating $157,640.18 in revenue.; detail=Verification query failed: syntax error at or near "LIMIT"
+LINE 2: LIMIT 501
+        ^
+- **Grader:** The agent correctly identified the top category and revenue but failed verification due to a syntax error and did not fulfill the rubric requirement to rank Electronics above Sports and Home. The verification failure and missing comparative ranking cause the response to not fully meet the criteria.
+- **Note:** Failure attributed to verification (draft inconsistent with independent check).
 
-No graded v2 failures to list — the suite did not finish under a working LLM this sprint. Unit/regression coverage for glossary disclosure, smoke gate, MCP guardrails, and chart/export paths still passed offline.
-
-## Known residual limitations (for README)
-
-Pull these until a green `report_v2.md` score replaces them:
-
-1. **Live v2 score not yet recorded** — full 30-question suite awaits a working default-provider key/quota.
-2. **BQ-07 (MoM growth draft completeness)** — v1 carryover: agent often names **Central** but may omit growth magnitude (+6) / month pair in the draft the rubric checks.
-3. **BQ-11 disclosure quality is structural but still LLM-phrased** — v2-1/v2-2 record glossary defaults and append `Assumption:` lines; narrative wording quality still depends on the model.
-4. **Google provider** — default model id `gemini-2.0-flash` is retired (`404`); OpenAI-shaped tool JSON with `additionalProperties` has also been rejected by Gemini until the adapter strips unsupported fields.
-5. **Cross-model comparison empty** — see `comparison_v2.md` (pending first successful `--compare-providers` run).

@@ -30,9 +30,10 @@
 | v2-4 | CI smoke-subset regression gate | BR-13 | — | M | Done |
 | v2-5 | Structured tracing + redaction | BR-15, BR-17 | — | L | Done |
 | v2-6 | Local run replay command | BR-16 | — | M | Done |
-| v2-7 | Cross-model evaluation comparison | BR-14 | — | M | Done |
+| v2-7 | Cross-model evaluation comparison across configurable Nebius-hosted models (amended by CR-2 / ADR-011 CR-2; BR-14) | BR-14 | — | M | Done |
 | v2-8 | Chart recommendation + CSV/XLSX export | BR-19 | — | M | Done |
 | v2-9 | MCP server (`ask_data_question` tool) | BR-18 | — | L | Done |
 | v2-10 | MCP guardrail-parity test | BR-18 | — | M | Done |
-| v2-11 | README / docs update for v2.0 | — | — | S | Done |
+| v2-11 | README / docs update for v2.0 (deliverables refreshed under CR-2) | — | — | S | Done |
 | v2-12 | Final polish, tag v2.0.0 | All | — | M | Planned |
+| CR-2 | Scope amendment: packaged comparison uses Nebius-hosted models only (`--compare-models`); LLMProvider abstraction unchanged | BR-14 (amended), ADR-011 (CR-2) | — | M | Done |
