@@ -31,6 +31,38 @@ Replay a prior run without calling the LLM:
 python -m src.cli replay logs/run_20260918T000001Z.jsonl
 ```
 
+## Using with an MCP client
+
+The agent can run as an [MCP](https://modelcontextprotocol.io/) server that exposes a single tool, `ask_data_question(question, database_url)`, wrapping the same investigate → verify → narrative path as the CLI (no raw SQL tools).
+
+Standalone (stdio — preferred for local MCP clients):
+
+```bash
+python -m src.mcp_server
+```
+
+Or via Compose: `docker compose up mcp` (same image; still typically launched as a stdio subprocess by the client).
+
+Example client config (generic MCP-capable host; adjust the Python path to your venv):
+
+```json
+{
+  "mcpServers": {
+    "ai-analyst-agent": {
+      "command": "/absolute/path/to/ai-analyst-agent/.venv/bin/python",
+      "args": ["-m", "src.mcp_server"],
+      "cwd": "/absolute/path/to/ai-analyst-agent",
+      "env": {
+        "LLM_PROVIDER": "nebius",
+        "NEBIUS_API_KEY": "your-key"
+      }
+    }
+  }
+}
+```
+
+Pass a **read-only** Postgres URL as `database_url` on each tool call. See [`docs/API.md`](docs/API.md#mcp-server-srcmcp_serverpy) for the full env-var list.
+
 ## Connecting to Your Own Database
 
 `docker compose up -d db` starts a **demo/seeded** Postgres instance for local eval and Quickstart only. Intended real usage is pointing the agent at **your** PostgreSQL database.

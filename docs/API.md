@@ -113,3 +113,26 @@ Semantic glossary (canonical business terms — prefer these over guessing):
 | `correlation` | `col_a`, `col_b` | `{col_a, col_b, correlation}` |
 | `segment` | `group_col`, `metric_col`; optional `func` (default `mean`) | list of segment summary rows |
 
+## MCP Server (`src/mcp_server.py`)
+
+Model Context Protocol server (v2 ADR-009 / BR-18) that exposes **exactly one** tool — the full agent loop — rather than low-level SQL/schema primitives.
+
+| Item | Detail |
+| --- | --- |
+| Entrypoint | `python -m src.mcp_server` (stdio). Docker: `docker compose up mcp` (image entrypoint `python -m mcp_server`) |
+| Tool | `ask_data_question(question: str, database_url: str) -> str` |
+| Behavior | Sets `READONLY_DATABASE_URL` / `DATABASE_URL` for the call, then runs `investigate()` (schema preload, glossary, plan/execute/reflect/verify) + `format_output()` and returns **narrative text only** |
+| Not exposed | `introspect_schema`, `run_sql`, `run_stats`, `verify` |
+
+### Environment variables
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `LLM_PROVIDER` | no (default `nebius`) | Same provider abstraction as the CLI |
+| `NEBIUS_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` | one of | Only the selected provider’s key |
+| `LLM_MODEL` | no | Optional override of the provider default model |
+| `NEBIUS_*` / `MAX_ITERATIONS` / `ROW_LIMIT` / `QUERY_TIMEOUT_SECONDS` | no | Same knobs as CLI / SQL executor |
+| `READONLY_DATABASE_URL` / `DATABASE_URL` | optional default | Overridden per call by the tool’s `database_url` argument (prefer a read-only role URL) |
+
+Underlying helper for tests / embedding: `ask_data_question(question, database_url, *, client=None) -> str`.
+

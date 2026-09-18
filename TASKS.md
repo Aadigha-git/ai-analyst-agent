@@ -32,7 +32,7 @@
 | v2-6 | Local run replay command | BR-16 | — | M | Done |
 | v2-7 | Cross-model evaluation comparison | BR-14 | — | M | Done |
 | v2-8 | Chart recommendation + CSV/XLSX export | BR-19 | — | M | Done |
-| v2-9 | MCP server (`ask_data_question` tool) | BR-18 | — | L | Planned |
+| v2-9 | MCP server (`ask_data_question` tool) | BR-18 | — | L | Done |
 | v2-10 | MCP guardrail-parity test | BR-18 | — | M | Planned |
 | v2-11 | README / docs update for v2.0 | — | — | S | Planned |
 | v2-12 | Final polish, tag v2.0.0 | All | — | M | Planned |

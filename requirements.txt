@@ -8,4 +8,4 @@ openai
 anthropic
 google-genai
 PyYAML
-openpyxl
+mcp>=1.9.0,<2

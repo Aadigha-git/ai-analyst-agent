@@ -26,10 +26,34 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql://analyst:analyst@db:5432/analyst
+      READONLY_DATABASE_URL: postgresql://analyst_readonly:change_me@db:5432/analyst
     volumes:
       - ./logs:/app/logs
+      - ./outputs:/app/outputs
     stdin_open: true
     tty: true
+
+  # MCP server (stdio). Prefer `python -m src.mcp_server` locally for MCP clients.
+  # Compose keeps a long-lived process for containerized deploys; clients that speak
+  # stdio should still launch `python -m src.mcp_server` (or this image entrypoint)
+  # as a subprocess rather than attaching to a pre-started daemon.
+  mcp:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://analyst:analyst@db:5432/analyst
+      READONLY_DATABASE_URL: postgresql://analyst_readonly:change_me@db:5432/analyst
+      PYTHONPATH: /app/src
+    volumes:
+      - ./logs:/app/logs
+      - ./outputs:/app/outputs
+    stdin_open: true
+    tty: true
+    entrypoint: ["python", "-m", "mcp_server"]
 
 volumes:
   pgdata:
